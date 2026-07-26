@@ -21,7 +21,7 @@ min_machines_running = 1
 
 [[mounts]]
 source = "synqit_data"
-destination = "/app/jac/.jac"
+destination = "/app/.jac"
 
 [[vm]]
 size = "shared-cpu-1x"

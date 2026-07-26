@@ -1,0 +1,57 @@
+[project]
+name = "Synqit"
+version = "0.1.0"
+description = "Shared source control for teams building in parallel"
+entry-point = "main.jac"
+kind = "fullstack"
+
+[serve]
+port = 8000
+base_route_app = "app"
+
+[dependencies]
+byllm = "*"
+requests = "*"
+
+[dependencies.npm]
+# jac-client's generated client_runtime.js imports these directly. They are
+# meant to be auto-injected, but that did not happen on a clean checkout
+# here (JAC_CLIENT_001 at build time), so they are pinned explicitly rather
+# than left to the host platform to supply.
+react = "latest"
+"react-dom" = "latest"
+"react-router-dom" = "latest"
+"react-error-boundary" = "latest"
+"react-hook-form" = "latest"
+"@hookform/resolvers" = "latest"
+zod = "latest"
+clsx = "latest"
+"tailwind-merge" = "latest"
+"class-variance-authority" = "latest"
+"radix-ui" = "latest"
+"@hugeicons/react" = "latest"
+"@hugeicons/core-free-icons" = "latest"
+"lucide-react" = "latest"
+"tw-animate-css" = "latest"
+"@fontsource-variable/inter" = "latest"
+
+[dependencies.npm.dev]
+tailwindcss = "latest"
+"@tailwindcss/vite" = "latest"
+"@vitejs/plugin-react" = "^4.3.4"
+
+[client.vite]
+plugins = ["tailwindcss()"]
+lib_imports = ["import tailwindcss from '@tailwindcss/vite'"]
+
+[jac-shadcn]
+style = "nova"
+baseColor = "zinc"
+theme = "indigo"
+font = "inter"
+radius = "medium"
+menuAccent = "subtle"
+
+[jacpack]
+name = 'Synqit'
+description = 'Jac IDE snapshot for Synqit'

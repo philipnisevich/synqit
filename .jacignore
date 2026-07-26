@@ -1,0 +1,6 @@
+# Build artifacts and vendored code - not ours to compile or lint.
+.jac/
+node_modules/
+
+# The Next.js marketing site is its own toolchain, not part of the Jac app.
+web/

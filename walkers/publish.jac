@@ -12,6 +12,15 @@ can call it directly - same nested-spawn lesson as blast_radius/integrate.
 """
 
 def do_publish(push_id: str) -> dict {
+    import os;
+    if not os.environ.get("GITHUB_TOKEN") {
+        return {
+            "error": "server_not_configured",
+            "missing": "GITHUB_TOKEN",
+            "message": "This Synqit server has no GitHub token, so it cannot commit to the repository. Set GITHUB_TOKEN in the server environment (or run `synqit configure` from the repo root) and restart.",
+        };
+    }
+
     push = jobj(push_id);
     if not isinstance(push, PushRequest) {
         return {"error": "push_not_found", "push_id": push_id};

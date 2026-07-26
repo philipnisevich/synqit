@@ -1,7 +1,14 @@
+import os;
+
 import from nodes { PushRequest, File, Project }
 import from walkers.blast_radius { compute_blast_radius, BlastFile }
 import from byllm.lib { Model }
 
+"""Constructing a Model needs no credentials - byLLM only reads
+ANTHROPIC_API_KEY when a `by llm` call actually fires (verified against
+byllm 0.6.19). So this stays a module-level glob and the server boots fine
+without the key; do_integrate below is what refuses to run without it,
+which keeps a missing secret from taking the whole app down with it."""
 glob llm: Model = Model(model_name="claude-sonnet-5");
 
 """The actual integration step. Takes a push's blast-radius context (not the
@@ -121,6 +128,14 @@ def find_broken_references(original: dict[str, str], updated: dict[str, str]) ->
 """Plain function (not walker-spawn-only) so the `push` walker can call it
 directly - same nested-spawn lesson as blast_radius/compute_blast_radius."""
 def do_integrate(push_id: str, max_hops: int) -> dict {
+    if not os.environ.get("ANTHROPIC_API_KEY") {
+        return {
+            "error": "server_not_configured",
+            "missing": "ANTHROPIC_API_KEY",
+            "message": "This Synqit server has no Anthropic API key, so it cannot run the integration step. Set ANTHROPIC_API_KEY in the server environment (or run `synqit configure` from the repo root) and restart.",
+        };
+    }
+
     push = jobj(push_id);
     if not isinstance(push, PushRequest) {
         return {"error": "push_not_found", "push_id": push_id};

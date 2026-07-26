@@ -1,19 +1,29 @@
 # Deployment — Fly.io and JacHammer
 
-Where things actually live: the whole running service is `jac/` — a Jac
-(`jaclang`) API server, entry point `jac/main.sv.jac`, config in
-`jac/jac.toml`. It's the entire "brain" of Synqit: the graph, the walkers,
-the LLM integration step, the GitHub commit step. Everything under `jac/`
-is what needs to get deployed. `cli/` and `web/` are separate pieces, not
-part of this.
+Where things actually live: **the repo root is the app**. `jac.toml` +
+`main.jac` define one Jac full-stack project that serves both the web UI
+(at `/`) and the REST API from a single process — the graph, the walkers,
+the LLM integration step, the GitHub commit step, and the browser client.
+Deploying means deploying the repo root.
+
+That single process exposes two endpoint families on the same port:
+
+- `POST /walker/<name>` — the walkers (`push`, `integrate`, `publish`,
+  `seed_project`, ...). This is what the `synqit` CLI calls.
+- `POST /function/<name>` — the `def:pub` functions in
+  `services/synqitService.sv.jac`. This is what the browser UI calls.
+
+Both operate on the same shared graph, so a project created from the CLI
+shows up in the web UI and vice versa. `cli/` and `web/` (the Next.js
+marketing site) are separate pieces, not part of the deployed app.
 
 ## Why we need a real deployed server at all
 
-Up to now everything has been tested against `localhost:8899` on one
+Up to now everything has been tested against `localhost:8000` on one
 machine, which only that machine can reach. The entire point of this
 project is a **shared graph that multiple developers push into** — that
 only means anything once it's one server multiple people (and their CLIs)
-can actually hit. So: deploy `jac/` somewhere with a real URL, set the
+can actually hit. So: deploy the repo somewhere with a real URL, set the
 three required secrets there, and everyone points at that URL instead of
 their own localhost.
 
@@ -22,11 +32,17 @@ their own localhost.
   on whatever repo(s) it needs to touch.
 - `ANTHROPIC_API_KEY` — used by byLLM (Jac's native LLM-calling feature)
   for the `integrate` step. Model is pinned to `claude-sonnet-5` in
-  `jac/walkers/integrate.jac` (cost call, not a capability limit).
+  `walkers/integrate.jac` (cost call, not a capability limit).
 - Ideally also a real `JWT_SECRET` — Jac's built-in auth defaults to a
   public, well-known test signing secret
   (`supersecretkey_for_testing_only!`). Fine on localhost, not fine on a
   real shared URL other people register accounts against.
+
+**Missing secrets no longer kill the deploy.** The server boots without
+them, warns on stderr, and serves the UI; `seed`, `integrate`, and
+`publish` each return a `server_not_configured` error naming the variable
+they need. This is deliberate — a hard exit on a hosted platform takes the
+UI down with it and leaves nothing to diagnose the misconfiguration with.
 
 ## Option 1: JacHammer (current plan for the hackathon)
 
@@ -73,12 +89,11 @@ to Fly.io (below), not mid-demo.
 **How to actually deploy it (from their docs):**
 1. In the JacHammer dashboard, start a new project via "import an existing
    repository" and point it at `julianshekhtmeyster/synqit-hack`.
-2. JacHammer's own docs don't describe monorepo subfolder deploys
-   explicitly — worth checking whether it wants the whole repo or can be
-   pointed specifically at the `jac/` subdirectory as the app root. If it
-   insists on repo-root, may need to confirm with JacHammer's project
-   settings how to set `jac/` as the working directory / entry point
-   (`main.sv.jac`).
+2. No subfolder configuration needed — JacHammer builds from the repo
+   root, and the repo root is now the app (`jac.toml`, entry point
+   `main.jac`). This is exactly why the layout was restructured: the older
+   layout kept the service in a `jac/` subdirectory with its own nested
+   `jac.toml`, which JacHammer's build ignored.
 3. Set the two (ideally three) secrets above as **project environment
    variables** in their dashboard — these get "sourced into your app's own
    running process — the preview and any deploy," per their docs.
@@ -93,25 +108,25 @@ reliably than the regular pages if a fetch tool comes back empty).
 
 ## Option 2: Fly.io (built, not deployed — the fallback)
 
-Already fully scaffolded and sitting in `jac/`, untouched, ready to use if
-JacHammer's persistence turns out not to hold up, or if this needs to run
-somewhere real beyond the hackathon:
+Already fully scaffolded at the repo root, ready to use if JacHammer's
+persistence turns out not to hold up, or if this needs to run somewhere
+real beyond the hackathon:
 
-- `jac/Dockerfile` — `python:3.12-slim`, installs `jaclang`/`byllm`/
-  `requests`, runs `jac start main.sv.jac --port 8080 --no_client`.
-- `jac/fly.toml` — one always-on machine
+- `Dockerfile` — `python:3.12-slim`, installs `jaclang`/`byllm`/
+  `requests`/`jac-client`, runs `jac install` to pull the npm client
+  dependencies, then `jac start main.jac --port 8080`.
+- `fly.toml` — one always-on machine
   (`min_machines_running = 1`, `auto_stop_machines = false` — **not**
   auto-scaled, because Jac's default SQLite persistence backend doesn't
   support multiple machines writing to the same file), plus a **mounted
-  Fly Volume at `/app/jac/.jac`** — this is the line that actually makes
+  Fly Volume at `/app/.jac`** — this is the line that actually makes
   the graph survive restarts/redeploys. Without it, same failure mode as
   the JacHammer risk above.
-- `jac/.dockerignore` — keeps `.env`, local `.jac/` data, and caches out
-  of the built image.
+- `.dockerignore` — keeps `.env`, local `.jac/` data, caches, and the
+  Next.js site's `node_modules` out of the built image.
 
 **To deploy:**
 ```bash
-cd jac
 flyctl auth login          # needs a real browser session
 flyctl launch              # reads fly.toml, creates the app + volume
 flyctl volumes create synqit_data --size 1   # if launch doesn't create it automatically
