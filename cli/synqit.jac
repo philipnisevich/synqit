@@ -1,9 +1,12 @@
 import sys;
 
-import from commands { cmd_login, cmd_init, cmd_push, cmd_status, cmd_repair, cmd_help }
+import from commands { cmd_login, cmd_configure, cmd_init, cmd_push, cmd_status, cmd_repair, cmd_help }
 import from ui { fail }
 
-glob KNOWN_FLAGS: list[str] = ["base", "branch", "github", "username", "password"];
+glob KNOWN_FLAGS: list[str] = [
+    "base", "branch", "github", "username", "password",
+    "jac-dir", "github-token", "anthropic-key",
+];
 
 obj ParsedArgs {
     has positionals: list[str] = [];
@@ -64,6 +67,8 @@ with entry {
             cmd_help();
         } elif command == "login" {
             cmd_login(parsed.flags.get("base"), parsed.flags.get("username"), parsed.flags.get("password"));
+        } elif command == "configure" {
+            cmd_configure(parsed.flags.get("jac-dir"), parsed.flags.get("github-token"), parsed.flags.get("anthropic-key"));
         } elif command == "init" {
             project_arg: str | None = rest[0] if rest else None;
             cmd_init(project_arg, parsed.flags.get("branch"), parsed.flags.get("github"));

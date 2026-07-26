@@ -6,6 +6,7 @@ import from config { load_config, save_config }
 import from api { register, login as api_login, call_walker }
 import from git_ops { derive_owner_repo, is_git_root, current_branch, head_sha, working_tree_changes, fetch_branch, sync_to_commit }
 import from workspace { changed_files, hashes_for, load_state, read_tracked_workspace, save_state }
+import from server_env { verify_github_token, verify_anthropic_key, write_env_file }
 import from ui { bold, cyan, gray, step, ok, info, fail }
 
 glob DEFAULT_BASE: str = "http://localhost:8899";
@@ -75,6 +76,64 @@ def cmd_login(base_flag: str | None, username_flag: str | None, password_flag: s
     }
     save_config({"base": base, "token": session["token"], "username": session["username"]});
     info(gray("    Credentials saved. Run `synqit init` from a project's repo root next."));
+}
+
+"""Sets up the SERVER's credentials (GITHUB_TOKEN, ANTHROPIC_API_KEY) - not
+this CLI's login. Run from wherever you'll run `jac start` (normally the
+jac/ directory) since that's where the .env it writes needs to live.
+Verifies both credentials against their real providers BEFORE saving
+anything - a bad token never gets written, so the server can never start
+believing it has working credentials when it doesn't."""
+def cmd_configure(jac_dir_flag: str | None, github_token_flag: str | None, anthropic_key_flag: str | None) {
+    jac_dir: str = jac_dir_flag or os.getcwd();
+    env_path: str = os.path.join(jac_dir, ".env");
+
+    github_token: str = github_token_flag as str if github_token_flag else "";
+    anthropic_key: str = anthropic_key_flag as str if anthropic_key_flag else "";
+
+    if not github_token or not anthropic_key {
+        stream: any = sys.stdout;
+        if not stream.isatty() {
+            fail("`synqit configure` must run in an interactive terminal, or pass --github-token/--anthropic-key.");
+            return;
+        }
+        info("Configuring the Synqit server. Credentials will be saved to " + env_path + ".");
+        if not github_token {
+            github_token = getpass.getpass("GitHub token (fine-grained, Contents: read and write): ");
+        }
+        if not anthropic_key {
+            anthropic_key = getpass.getpass("Anthropic API key: ");
+        }
+    }
+
+    if not github_token or not anthropic_key {
+        fail("Both a GitHub token and an Anthropic API key are required. Nothing was saved.");
+        return;
+    }
+
+    step("Verifying GitHub token...");
+    try {
+        github_user: str = verify_github_token(github_token);
+        ok("GitHub token verified for " + github_user);
+    } except Exception as error {
+        fail("GitHub token verification failed: " + str(error));
+        info(gray("    Nothing was saved. Fix the token and run `synqit configure` again."));
+        return;
+    }
+
+    step("Verifying Anthropic API key...");
+    try {
+        verify_anthropic_key(anthropic_key);
+        ok("Anthropic API key verified");
+    } except Exception as error {
+        fail("Anthropic API key verification failed: " + str(error));
+        info(gray("    Nothing was saved. Fix the key and run `synqit configure` again."));
+        return;
+    }
+
+    write_env_file(env_path, {"GITHUB_TOKEN": github_token, "ANTHROPIC_API_KEY": anthropic_key});
+    ok("saved verified credentials to " + env_path);
+    info(gray("    Start the server with: cd " + jac_dir + " && jac start main.sv.jac --port 8899 --no_client"));
 }
 
 def cmd_init(project_arg: str | None, branch_flag: str | None, github_flag: str | None) {
@@ -261,6 +320,7 @@ def cmd_repair {
 def cmd_help {
     print(bold("synqit") + " - shared source control without branches, commits, or pulls\n");
     print(bold("Usage"));
+    print("  synqit configure                 Set up the SERVER's GitHub token + Anthropic key (run once, from jac/)");
     print("  synqit login [--base <url>]      Log in (or create an account) on a Synqit server");
     print("  synqit init [project]            Connect this repo root to Synqit");
     print("  synqit push \"feature intent\"     Submit a feature and sync this workspace");
@@ -268,6 +328,7 @@ def cmd_help {
     print("  synqit repair                    Restore this workspace to shared GitHub main");
     print("  synqit help                      Show this help\n");
     print(bold("Example"));
+    print("  cd jac && synqit configure");
     print("  synqit login --base https://synqit.example");
     print("  synqit init hackathon-demo");
     print("  synqit push \"Add password validation\"");

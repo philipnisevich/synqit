@@ -21,11 +21,22 @@ def green(text: str) -> str { return colorize("32", text); }
 def red(text: str) -> str { return colorize("31", text); }
 def cyan(text: str) -> str { return colorize("36", text); }
 
-def step(msg: str) { print(gray("  -> ") + msg); }
-def ok(msg: str) { print(green("  [ok] ") + msg); }
-def info(msg: str) { print(msg); }
+"""Every print here is followed by an explicit flush. Without it, stdout is
+block-buffered whenever it isn't a TTY (any pipe, redirect, or log capture)
+while stderr is unbuffered - so a fail() after a step() can appear BEFORE it
+in captured output, even though it happened after. Confirmed this actually
+happens, not just theoretical."""
+def flush_stdout {
+    stream: any = sys.stdout;
+    stream.flush();
+}
+
+def step(msg: str) { print(gray("  -> ") + msg); flush_stdout(); }
+def ok(msg: str) { print(green("  [ok] ") + msg); flush_stdout(); }
+def info(msg: str) { print(msg); flush_stdout(); }
 
 def fail(msg: str) {
+    flush_stdout();
     stream: any = sys.stderr;
     stream.write(red("  [x] ") + msg + "\n");
 }

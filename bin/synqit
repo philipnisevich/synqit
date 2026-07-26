@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Thin wrapper so `synqit` works as a real command. Jac's native-binary
+# compiler (nacompile) doesn't support the Python interop this CLI needs
+# (subprocess for git, requests for HTTP), so this execs `jac run` under the
+# hood instead of being a real standalone binary - see README.md.
+set -euo pipefail
+
+# Resolve the real path to this script, following symlinks (so it works
+# whether this is run directly or via a symlink on PATH).
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+BIN_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+REPO_ROOT="$(dirname "$BIN_DIR")"
+
+if ! command -v jac >/dev/null 2>&1; then
+  echo "  [x] \`jac\` is not installed or not on PATH. Install jaclang first (pip install jaclang byllm requests)." >&2
+  exit 1
+fi
+
+exec jac run "$REPO_ROOT/cli/synqit.jac" "$@"
