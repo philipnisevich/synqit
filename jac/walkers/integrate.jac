@@ -1,5 +1,5 @@
 import from nodes { PushRequest, File, Project }
-import from walkers.blast_radius { blast_radius, BlastFile }
+import from walkers.blast_radius { compute_blast_radius, BlastFile }
 import from byllm.lib { Model }
 
 glob llm: Model = Model(model_name="claude-sonnet-5");
@@ -49,6 +49,7 @@ obj Workspace {
     def integrate(intent: str, proposed_changes: list[dict]) -> IntegrationResult by llm(
         tools=[self.list_files, self.read_file, self.write_file, self.delete_file],
         max_react_iterations=20,
+        temperature=None,
     );
 }
 
@@ -64,9 +65,58 @@ sem Workspace.write_file.content = "The complete new content of the file - not a
 sem Workspace.delete_file = "Delete a file.";
 sem Workspace.delete_file.path = "The file path to delete.";
 
-sem Workspace.integrate = "Make the feature intent true in the CURRENT workspace, which may have moved on since the developer proposed their changes. Use the tools to inspect and edit files - a successful integration MUST call write_file or delete_file at least once, never just describe the change. Only return needs_human when the intent is genuinely incompatible with what the workspace already does (e.g. contradicts a product decision already made elsewhere) - never for ordinary implementation difficulty.";
+sem Workspace.integrate = "Make the feature intent true in the CURRENT workspace, which may have moved on since the developer proposed their changes. Use the tools to inspect and edit files - a successful integration MUST call write_file or delete_file at least once, never just describe the change. The workspace contains every file structurally reachable from what you're changing (callers, dependents, tests) - before finishing, use list_files and read_file to check whether anything else in the workspace references what you changed (a renamed or removed function, a changed signature, a moved export), and update every call site you find so nothing is left broken. Only return needs_human when the intent is genuinely incompatible with what the workspace already does (e.g. contradicts a product decision already made elsewhere) - never for ordinary implementation difficulty.";
 sem Workspace.integrate.intent = "The feature the developer wants to be true.";
 sem Workspace.integrate.proposed_changes = "The developer's own proposed edits, written against their possibly-stale local copy - a strong hint for what to implement, not a literal patch to apply verbatim.";
+
+"""Deterministic - no LLM involved. Regex-extract exported symbol names
+(matches the same cheap-regex philosophy as seed_project's import scan)."""
+def extract_exports(content: str) -> set[str] {
+    import re;
+    names: set[str] = set();
+    for m in re.finditer(r'export\s+(?:async\s+)?function\s+(\w+)', content) {
+        names.add(m.group(1));
+    }
+    for m in re.finditer(r'export\s+(?:const|let|var)\s+(\w+)', content) {
+        names.add(m.group(1));
+    }
+    for m in re.finditer(r'export\s+class\s+(\w+)', content) {
+        names.add(m.group(1));
+    }
+    return names;
+}
+
+"""Deterministic verification of the AI's output - not a judgment call. Diffs
+exported symbols on every file the AI actually changed to find what it
+removed or renamed, then checks every OTHER file in the same workspace for a
+lingering reference. Returns {path: [broken_symbol, ...]} - empty means clean.
+"""
+def find_broken_references(original: dict[str, str], updated: dict[str, str]) -> dict[str, list[str]] {
+    import re;
+    removed_symbols: set[str] = set();
+    for path in original.keys() {
+        old_content: str = original[path];
+        new_content: str = updated.get(path, old_content);
+        if old_content != new_content {
+            removed_symbols = removed_symbols | (extract_exports(old_content) - extract_exports(new_content));
+        }
+    }
+    if not removed_symbols {
+        return {};
+    }
+    broken: dict[str, list[str]] = {};
+    for path in updated.keys() {
+        content: str = updated[path];
+        if original.get(path) != content {
+            continue;
+        }
+        hits: list[str] = [s for s in removed_symbols if re.search(r'\b' + re.escape(s) + r'\b', content)];
+        if hits {
+            broken[path] = hits;
+        }
+    }
+    return broken;
+}
 
 walker integrate {
     has push_id: str;
@@ -86,21 +136,44 @@ walker integrate {
         }
         proj = projects[0];
 
-        radius = blast_radius(push_id=self.push_id, max_hops=self.max_hops);
-        root spawn radius;
-        context_files: list[BlastFile] = radius.reports[0] if radius.reports else [];
+        context_files: list[BlastFile] = compute_blast_radius(self.push_id, self.max_hops);
 
         workspace_files: dict[str, str] = {};
         for f in context_files {
             workspace_files[f.path] = f.content;
         }
-        ws = Workspace(files=workspace_files);
+        original_files: dict[str, str] = dict(workspace_files);
+        ws = Workspace(files=dict(workspace_files));
 
         result = ws.integrate(intent=push.intent, proposed_changes=push.changes);
 
         if result.status == "needs_human" {
             push.status = "needs_human";
             report {"status": "needs_human", "reason": result.reason};
+            disengage;
+        }
+
+        broken = find_broken_references(original_files, ws.files);
+        attempts: int = 0;
+        while broken and attempts < 2 {
+            fix_notes: list[str] = [];
+            for path in broken.keys() {
+                syms: str = ", ".join(broken[path]);
+                fix_notes.append(path + " still references removed/renamed: " + syms);
+            }
+            follow_up_intent = push.intent + "\n\nVerification found unfinished work - fix these exactly: " + "; ".join(fix_notes);
+            result = ws.integrate(intent=follow_up_intent, proposed_changes=push.changes);
+            broken = find_broken_references(original_files, ws.files);
+            attempts += 1;
+        }
+
+        if broken {
+            push.status = "integration_incomplete";
+            report {
+                "status": "integration_incomplete",
+                "reason": "Deterministic check still finds broken references after retries.",
+                "broken": broken,
+            };
             disengage;
         }
 
