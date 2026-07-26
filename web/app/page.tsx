@@ -1,7 +1,14 @@
 import { Nav } from "./components/Nav";
 import { NotchMock } from "./components/NotchMock";
 import { TerminalWindow } from "./components/TerminalWindow";
-import { DetailSection, Eyebrow, FaqItem, FeatureCard, TrunkDivider } from "./components/ui";
+import {
+  CardGrid,
+  DetailSection,
+  Eyebrow,
+  FaqItem,
+  FeatureCard,
+  SectionHead,
+} from "./components/ui";
 
 const FEATURES = [
   {
@@ -91,49 +98,50 @@ export default function Home() {
     <div id="top" className="flex min-h-screen flex-col">
       <Nav />
 
-      {/* Hero */}
-      <section className="relative overflow-hidden px-6 pt-20 pb-24 text-center">
-        <div className="mx-auto max-w-3xl">
-          <Eyebrow>Open source · self-hosted</Eyebrow>
-          <h1 className="mt-6 font-display text-5xl leading-[1.05] sm:text-6xl">
-            One shared main.
-            <br />
-            <span className="text-accent italic">No branches to review.</span>
-          </h1>
-          <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted">
-            Push a feature. An agent integrates it into the newest main. When it hits a
-            decision only you can make — not a merge conflict, a product one — it asks.
-            Right in your notch.
-          </p>
-          <div className="mt-8 flex items-center justify-center gap-3">
-            <a
-              href="#quickstart"
-              className="rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-contrast transition hover:opacity-90"
-            >
-              Get started
-            </a>
-            <a
-              href="https://github.com/ben564885/bens-attempt"
-              className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-text transition hover:border-accent/50"
-            >
-              GitHub ↗
-            </a>
+      {/* Hero — artwork band with the headline sitting over its faded lower half */}
+      <section className="hero-art relative isolate">
+        <div className="hero-veil px-6 pt-40 pb-20 text-center sm:pt-48">
+          <div className="mx-auto max-w-3xl">
+            <Eyebrow>Open source · self-hosted</Eyebrow>
+            <h1 className="mt-6 font-display text-5xl leading-[1.05] sm:text-[64px]">
+              One shared main.
+              <br />
+              No branches to review.
+            </h1>
+            <p className="mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-muted">
+              Push a feature. An agent integrates it into the newest main. When it hits a
+              decision only you can make — not a merge conflict, a product one — it asks.
+              Right in your notch.
+            </p>
+            <div className="mt-8 flex items-center justify-center gap-3">
+              <a
+                href="#quickstart"
+                className="rounded-full bg-text px-5 py-2.5 text-sm font-medium text-white transition hover:opacity-85"
+              >
+                Get started
+              </a>
+              <a
+                href="https://github.com/ben564885/bens-attempt"
+                className="rounded-full border border-black/10 bg-white/60 px-5 py-2.5 text-sm font-medium text-text backdrop-blur transition hover:bg-white"
+              >
+                GitHub ↗
+              </a>
+            </div>
           </div>
-        </div>
-
-        <div className="mt-16">
-          <NotchMock />
         </div>
       </section>
 
-      <TrunkDivider notch />
+      {/* The escalation itself, lifted onto the seam under the hero */}
+      <section className="px-6 pb-24">
+        <NotchMock />
+      </section>
 
       {/* Quickstart */}
       <section id="quickstart" className="py-20">
         <div className="mx-auto grid max-w-6xl items-center gap-12 px-6 lg:grid-cols-2 lg:gap-20">
           <div>
             <Eyebrow>Quickstart</Eyebrow>
-            <h2 className="mt-4 font-display text-4xl italic">Running in one command.</h2>
+            <h2 className="mt-4 font-display text-4xl">Running in one command.</h2>
             <p className="mt-4 max-w-md text-[15px] leading-relaxed text-muted">
               Open source. Self-hosted. The first run walks you through your GitHub token and
               OpenRouter key — every run after that just listens.
@@ -141,7 +149,7 @@ export default function Home() {
             <div className="mt-6 flex items-center gap-5">
               <a
                 href="https://github.com/ben564885/bens-attempt"
-                className="rounded-full bg-text px-4 py-2 text-sm font-medium text-bg transition hover:opacity-85"
+                className="rounded-full bg-text px-4 py-2 text-sm font-medium text-white transition hover:opacity-85"
               >
                 ★ Star on GitHub
               </a>
@@ -159,14 +167,13 @@ export default function Home() {
         </div>
       </section>
 
-      <TrunkDivider />
 
       {/* How it works */}
       <section id="how-it-works" className="py-20">
         <div className="mx-auto max-w-6xl px-6">
           <div className="max-w-xl">
             <Eyebrow>How it works</Eyebrow>
-            <h2 className="mt-4 font-display text-4xl italic">From push to shared main.</h2>
+            <h2 className="mt-4 font-display text-4xl">From push to shared main.</h2>
           </div>
           <div className="mt-12 grid gap-8 sm:grid-cols-3">
             {[
@@ -206,7 +213,7 @@ export default function Home() {
       {/* Status mock / second big visual */}
       <section className="py-10">
         <div className="mx-auto max-w-6xl px-6 text-center">
-          <h2 className="font-display text-3xl italic sm:text-4xl">
+          <h2 className="font-display text-3xl sm:text-4xl">
             See your workspace, not your diff.
           </h2>
           <div className="mx-auto mt-10 max-w-xl text-left">
@@ -225,23 +232,24 @@ export default function Home() {
         </div>
       </section>
 
-      <TrunkDivider />
 
       {/* Features grid */}
       <section id="features" className="py-20">
         <div className="mx-auto max-w-6xl px-6">
-          <div className="max-w-xl">
-            <Eyebrow>Features</Eyebrow>
-            <h2 className="mt-4 font-display text-4xl italic">
-              Everything shared source control needs to not be Git-plus-a-chatbot.
-            </h2>
-          </div>
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map((f) => (
-              <FeatureCard key={f.title} title={f.title}>
-                {f.body}
-              </FeatureCard>
-            ))}
+          <SectionHead
+            eyebrow="Features"
+            sub="Everything shared source control needs to not be Git plus a chatbot."
+          >
+            Built for one shared main.
+          </SectionHead>
+          <div className="mt-10">
+            <CardGrid>
+              {FEATURES.map((f) => (
+                <FeatureCard key={f.title} title={f.title}>
+                  {f.body}
+                </FeatureCard>
+              ))}
+            </CardGrid>
           </div>
         </div>
       </section>
@@ -312,19 +320,22 @@ export default function Home() {
       <DetailSection
         eyebrow="Timeout safety"
         heading="Escalations that don't hang your team."
-        dark
+        band
         visual={
-          <div className="space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-6 font-mono text-sm">
+          <div className="space-y-3 rounded-xl border border-border bg-surface p-6 font-mono text-sm">
             {["dev_ben", "dev_ana", "dev_theo"].map((dev, i) => (
               <div key={dev} className="flex items-center gap-3">
-                <span className="w-20 shrink-0 text-[#9a9ca3]">{dev}</span>
-                <div className="h-1.5 flex-1 rounded-full bg-white/10">
+                <span className="w-20 shrink-0 text-muted">{dev}</span>
+                <div className="h-1.5 flex-1 rounded-full bg-surface-2">
                   <div
-                    className="h-1.5 rounded-full bg-[#e3a458]"
-                    style={{ width: `${[62, 100, 18][i]}%` }}
+                    className="h-1.5 rounded-full"
+                    style={{
+                      width: `${[62, 100, 18][i]}%`,
+                      background: i === 1 ? "var(--danger)" : "var(--accent)",
+                    }}
                   />
                 </div>
-                <span className="w-16 text-right text-[#9a9ca3]">
+                <span className="w-16 text-right text-muted">
                   {["3:07", "expired", "0:54"][i]}
                 </span>
               </div>
@@ -400,28 +411,29 @@ export default function Home() {
         </p>
       </DetailSection>
 
-      <TrunkDivider />
 
       {/* Open source */}
       <section className="py-20">
         <div className="mx-auto max-w-6xl px-6">
-          <div className="max-w-xl">
-            <Eyebrow>Open source</Eyebrow>
-            <h2 className="mt-4 font-display text-4xl italic">
-              Extensible, adaptable, open source.
-            </h2>
-          </div>
-          <div className="mt-10 grid gap-4 sm:grid-cols-3">
-            <FeatureCard title="Self-hosted">
-              Runs on your machine or your infrastructure. No Synqit account, ever.
-            </FeatureCard>
-            <FeatureCard title="MIT licensed">
-              Fork it, read it, ship your own escalation surface on top of it.
-            </FeatureCard>
-            <FeatureCard title="Extensible">
-              The EscalationSurface seam means Slack, Linear, or your own UI can plug in
-              exactly where the notch does.
-            </FeatureCard>
+          <SectionHead
+            eyebrow="Open source"
+            sub="Read every line that runs your pushes, then change the ones you don't like."
+          >
+            Extensible, adaptable, open source.
+          </SectionHead>
+          <div className="mt-10">
+            <CardGrid>
+              <FeatureCard title="Self-hosted">
+                Runs on your machine or your infrastructure. No Synqit account, ever.
+              </FeatureCard>
+              <FeatureCard title="MIT licensed">
+                Fork it, read it, ship your own escalation surface on top of it.
+              </FeatureCard>
+              <FeatureCard title="Extensible">
+                The EscalationSurface seam means Slack, Linear, or your own UI can plug in
+                exactly where the notch does.
+              </FeatureCard>
+            </CardGrid>
           </div>
         </div>
       </section>
@@ -430,7 +442,7 @@ export default function Home() {
       <section className="py-20">
         <div className="mx-auto max-w-6xl px-6">
           <Eyebrow>Roadmap</Eyebrow>
-          <h2 className="mt-4 font-display text-4xl italic">
+          <h2 className="mt-4 font-display text-4xl">
             Where a surface could plug in next.
           </h2>
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -455,13 +467,12 @@ export default function Home() {
         </div>
       </section>
 
-      <TrunkDivider />
 
       {/* FAQ */}
       <section id="faq" className="py-20">
         <div className="mx-auto max-w-3xl px-6">
           <Eyebrow>FAQ</Eyebrow>
-          <h2 className="mt-4 font-display text-4xl italic">Questions, answered.</h2>
+          <h2 className="mt-4 font-display text-4xl">Questions, answered.</h2>
           <div className="mt-8">
             {FAQS.map((f) => (
               <FaqItem key={f.q} q={f.q} a={f.a} />
@@ -474,7 +485,7 @@ export default function Home() {
       <section className="bg-surface-2 py-24 text-center">
         <div className="mx-auto max-w-2xl px-6">
           <Eyebrow>Get started</Eyebrow>
-          <h2 className="mt-4 font-display text-4xl italic sm:text-5xl">
+          <h2 className="mt-4 font-display text-4xl sm:text-5xl">
             From clone to shared main in one command.
           </h2>
           <div className="mx-auto mt-8 max-w-md text-left">
@@ -492,7 +503,7 @@ export default function Home() {
           <div className="mt-6 flex items-center justify-center gap-3">
             <a
               href="https://github.com/ben564885/bens-attempt"
-              className="rounded-full bg-text px-4 py-2 text-sm font-medium text-bg transition hover:opacity-85"
+              className="rounded-full bg-text px-4 py-2 text-sm font-medium text-white transition hover:opacity-85"
             >
               ★ Star on GitHub
             </a>
@@ -504,78 +515,78 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="mt-auto bg-[#0b0c0f] py-16 text-[#c3c4c8]">
+      <footer className="mt-auto border-t border-border bg-surface-2/60 py-16 text-muted">
         <div className="mx-auto max-w-6xl px-6">
           <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <p className="flex items-center gap-2 font-mono text-sm text-[#f2f1ed]">
-                <span className="relative inline-flex h-4 w-7 items-center justify-center rounded-full bg-[#f2f1ed]">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#e3a458]" />
+              <p className="flex items-center gap-2 font-mono text-sm text-text">
+                <span className="relative inline-flex h-4 w-7 items-center justify-center rounded-full bg-text">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent" />
                 </span>
                 synqit
               </p>
-              <p className="mt-3 max-w-[22ch] text-sm text-[#7a7c82]">
+              <p className="mt-3 max-w-[22ch] text-sm text-muted">
                 A conflict becomes a question, not a rejected push.
               </p>
             </div>
             <div>
-              <p className="font-mono text-xs tracking-wide text-[#7a7c82] uppercase">
+              <p className="font-mono text-xs tracking-wide text-muted uppercase">
                 Product
               </p>
               <ul className="mt-3 space-y-2 text-sm">
                 <li>
-                  <a href="#quickstart" className="hover:text-white">
+                  <a href="#quickstart" className="hover:text-text">
                     Get started
                   </a>
                 </li>
                 <li>
-                  <a href="#how-it-works" className="hover:text-white">
+                  <a href="#how-it-works" className="hover:text-text">
                     How it works
                   </a>
                 </li>
               </ul>
             </div>
             <div>
-              <p className="font-mono text-xs tracking-wide text-[#7a7c82] uppercase">
+              <p className="font-mono text-xs tracking-wide text-muted uppercase">
                 Platform
               </p>
               <ul className="mt-3 space-y-2 text-sm">
                 <li>
-                  <a href="#features" className="hover:text-white">
+                  <a href="#features" className="hover:text-text">
                     Notch
                   </a>
                 </li>
                 <li>
-                  <a href="#features" className="hover:text-white">
+                  <a href="#features" className="hover:text-text">
                     Server
                   </a>
                 </li>
                 <li>
-                  <a href="#features" className="hover:text-white">
+                  <a href="#features" className="hover:text-text">
                     Precedent memory
                   </a>
                 </li>
               </ul>
             </div>
             <div>
-              <p className="font-mono text-xs tracking-wide text-[#7a7c82] uppercase">
+              <p className="font-mono text-xs tracking-wide text-muted uppercase">
                 Developer
               </p>
               <ul className="mt-3 space-y-2 text-sm">
                 <li>
-                  <a href="https://github.com/ben564885/bens-attempt" className="hover:text-white">
+                  <a href="https://github.com/ben564885/bens-attempt" className="hover:text-text">
                     GitHub
                   </a>
                 </li>
                 <li>
-                  <a href="#faq" className="hover:text-white">
+                  <a href="#faq" className="hover:text-text">
                     FAQ
                   </a>
                 </li>
               </ul>
             </div>
           </div>
-          <div className="mt-12 flex flex-col-reverse items-center justify-between gap-4 border-t border-white/10 pt-6 text-xs text-[#7a7c82] sm:flex-row">
+          <div className="mt-12 flex flex-col-reverse items-center justify-between gap-4 border-t border-border pt-6 text-xs text-muted sm:flex-row">
             <span>© 2026 synqit. Open source under MIT.</span>
           </div>
         </div>

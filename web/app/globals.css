@@ -1,31 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f6f5f1;
+  --bg: #fbfaf7;
   --surface: #ffffff;
-  --surface-2: #efede6;
-  --text: #15161a;
-  --text-muted: #5b5d63;
-  --border: #e3e0d8;
+  --surface-2: #f2f0ea;
+  --text: #16171a;
+  --text-muted: #6b6d73;
+  --border: #e6e3db;
   --accent: #c1791e;
-  --accent-contrast: #14100a;
+  --accent-contrast: #ffffff;
   --ok: #2f8f5b;
   --danger: #c1502e;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b0c0f;
-    --surface: #15171b;
-    --surface-2: #1b1e23;
-    --text: #f2f1ed;
-    --text-muted: #9a9ca3;
-    --border: #262a31;
-    --accent: #e3a458;
-    --accent-contrast: #1a1200;
-    --ok: #3fb37f;
-    --danger: #e2665a;
-  }
 }
 
 @theme inline {
@@ -50,7 +35,9 @@
 }
 
 html {
-  color-scheme: light dark;
+  /* Light only — the site is designed around the cream palette. */
+  color-scheme: light;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -75,7 +62,34 @@ h3 {
   text-wrap: balance;
 }
 
+/*
+ * Hero artwork. The illustration's own paper-white ground is matched by the
+ * background-color below, so the edges blend instead of banding.
+ */
+.hero-art {
+  background-color: #f0efec;
+  background-image: url("/backg.png");
+  background-position: center 38%;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+/* Fades the artwork into the page so the headline stays readable over it. */
+.hero-veil {
+  background: linear-gradient(
+    to bottom,
+    rgba(251, 250, 247, 0.1) 0%,
+    rgba(251, 250, 247, 0.55) 42%,
+    rgba(251, 250, 247, 0.92) 72%,
+    var(--bg) 100%
+  );
+}
+
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   *,
   *::before,
   *::after {

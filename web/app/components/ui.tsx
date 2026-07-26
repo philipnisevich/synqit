@@ -2,9 +2,52 @@ import type { ReactNode } from "react";
 
 export function Eyebrow({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-block rounded-full border border-border bg-surface-2 px-3 py-1 font-mono text-xs tracking-wide text-muted uppercase">
+    <span className="inline-block rounded-md border border-border bg-surface-2 px-2.5 py-1 font-mono text-[11px] tracking-wide text-muted uppercase">
       {children}
     </span>
+  );
+}
+
+/**
+ * Section heading in the display serif, with an optional standfirst underneath.
+ */
+export function SectionHead({
+  eyebrow,
+  children,
+  sub,
+}: {
+  eyebrow: string;
+  children: ReactNode;
+  sub?: ReactNode;
+}) {
+  return (
+    <div className="max-w-2xl">
+      <Eyebrow>{eyebrow}</Eyebrow>
+      <h2 className="mt-4 font-display text-4xl leading-[1.1] sm:text-[42px]">{children}</h2>
+      {sub && <p className="mt-3 text-[15px] leading-relaxed text-muted">{sub}</p>}
+    </div>
+  );
+}
+
+/**
+ * Hairline grid of cards that reads as one table rather than floating tiles —
+ * inner borders only, so the group shares a single outer frame.
+ */
+export function CardGrid({
+  columns = 3,
+  children,
+}: {
+  columns?: 2 | 3;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`grid overflow-hidden rounded-xl border border-border bg-surface sm:grid-cols-2 ${
+        columns === 3 ? "lg:grid-cols-3" : ""
+      }`}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -16,8 +59,8 @@ export function FeatureCard({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-5 transition hover:border-accent/40">
-      <h3 className="font-medium text-text">{title}</h3>
+    <div className="border-b border-border p-6 transition last:border-b-0 hover:bg-surface-2/50 sm:border-r sm:[&:nth-child(2n)]:border-r-0 lg:[&:nth-child(2n)]:border-r lg:[&:nth-child(3n)]:border-r-0">
+      <h3 className="text-[15px] font-medium text-text">{title}</h3>
       <p className="mt-1.5 text-sm leading-relaxed text-muted">{children}</p>
     </div>
   );
@@ -29,23 +72,18 @@ export function DetailSection({
   children,
   visual,
   reverse = false,
-  dark = false,
+  band = false,
 }: {
   eyebrow: string;
   heading: string;
   children: ReactNode;
   visual: ReactNode;
   reverse?: boolean;
-  dark?: boolean;
+  /** Warm cream band, used to break up long runs of white. */
+  band?: boolean;
 }) {
   return (
-    <section
-      className={
-        dark
-          ? "bg-[#0b0c0f] py-20 text-[#f2f1ed]"
-          : "py-20"
-      }
-    >
+    <section className={band ? "bg-surface-2/60 py-24" : "py-24"}>
       <div className="mx-auto max-w-6xl px-6">
         <div
           className={`grid items-center gap-10 lg:grid-cols-2 lg:gap-16 ${
@@ -53,21 +91,9 @@ export function DetailSection({
           }`}
         >
           <div>
-            <span
-              className={`inline-block rounded-full border px-3 py-1 font-mono text-xs tracking-wide uppercase ${
-                dark
-                  ? "border-white/15 bg-white/5 text-[#9a9ca3]"
-                  : "border-border bg-surface-2 text-muted"
-              }`}
-            >
-              {eyebrow}
-            </span>
-            <h2 className="mt-4 font-display text-3xl italic sm:text-4xl">{heading}</h2>
-            <div
-              className={`mt-4 space-y-3 text-[15px] leading-relaxed ${
-                dark ? "text-[#c3c4c8]" : "text-muted"
-              }`}
-            >
+            <Eyebrow>{eyebrow}</Eyebrow>
+            <h2 className="mt-4 font-display text-3xl leading-[1.15] sm:text-4xl">{heading}</h2>
+            <div className="mt-4 space-y-3 text-[15px] leading-relaxed text-muted">
               {children}
             </div>
           </div>
@@ -75,20 +101,6 @@ export function DetailSection({
         </div>
       </div>
     </section>
-  );
-}
-
-export function TrunkDivider({ notch = false }: { notch?: boolean }) {
-  return (
-    <div className="mx-auto flex max-w-6xl items-center gap-0 px-6" aria-hidden="true">
-      <span className="h-px flex-1 bg-border" />
-      {notch ? (
-        <span className="h-3 w-6 rounded-b-full border border-t-0 border-accent bg-accent/20" />
-      ) : (
-        <span className="h-1.5 w-1.5 rounded-full bg-border" />
-      )}
-      <span className="h-px flex-1 bg-border" />
-    </div>
   );
 }
 
