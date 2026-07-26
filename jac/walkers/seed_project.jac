@@ -33,6 +33,7 @@ walker seed_project {
         result = read_project(self.owner, self.repo, self.branch);
         snapshot: dict[str, str] = result["snapshot"] as dict[str, str];
         head: str = result["head"] as str;
+        proj.head = head;
 
         path_to_file: dict[str, File] = {};
         for file_path in snapshot.keys() {

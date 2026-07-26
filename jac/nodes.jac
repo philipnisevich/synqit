@@ -13,6 +13,7 @@ node Project {
     has branch: str;
     has members: list[str] = [];
     has created_at: str = "";
+    has head: str = "";
 }
 
 node File {
@@ -28,6 +29,9 @@ node PushRequest {
     has submitter: str = "";
     has status: str = "pending";
     has created_at: str = "";
+    has touched_paths: list[str] = [];
+    has deleted_paths: list[str] = [];
+    has summary: str = "";
 }
 
 edge Imports: File --> File {}

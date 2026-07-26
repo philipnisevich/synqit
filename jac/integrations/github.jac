@@ -73,10 +73,42 @@ def read_commit(owner: str, repo: str, commit_sha: str) -> dict[str, str] {
     return snapshot_at(owner, repo, commit_sha);
 }
 
-"""Publish next_snapshot as one commit on top of expected_head. Only writes
-blobs for paths that actually changed; raises if `branch` moved since
-expected_head (someone/something committed outside Synqit) rather than
-silently overwriting it."""
+"""Shared commit path: checks `branch` hasn't moved since expected_head
+(someone/something committed outside Synqit), builds a tree from the given
+blob entries on top of the current tree, and updates the ref. Raises rather
+than silently overwriting a moved branch."""
+def commit_tree_entries(
+    owner: str,
+    repo: str,
+    branch: str,
+    expected_head: str,
+    tree_entries: list[dict],
+    message: str,
+) -> str {
+    remote_head: str = repo_head(owner, repo, branch);
+    if remote_head != expected_head {
+        raise Exception(f"GitHub {branch} advanced outside Synqit (expected {expected_head}, found {remote_head}).");
+    }
+    if not tree_entries {
+        return remote_head;
+    }
+
+    commit = gh_request("GET", f"/repos/{owner}/{repo}/git/commits/{remote_head}");
+    base_tree_sha: str = commit["tree"]["sha"] as str;
+
+    next_tree = gh_request("POST", f"/repos/{owner}/{repo}/git/trees", {"base_tree": base_tree_sha, "tree": tree_entries});
+    next_commit = gh_request("POST", f"/repos/{owner}/{repo}/git/commits", {
+        "message": f"synqit: {message}",
+        "tree": next_tree["sha"],
+        "parents": [remote_head],
+    });
+    gh_request("PATCH", f"/repos/{owner}/{repo}/git/refs/heads/{branch}", {"sha": next_commit["sha"], "force": False});
+    return next_commit["sha"] as str;
+}
+
+"""Publish next_snapshot as one commit on top of expected_head, diffing
+against previous_snapshot to find what actually changed. Use publish_changes
+instead when the caller already knows exactly which paths changed."""
 def publish_snapshot(
     owner: str,
     repo: str,
@@ -86,14 +118,6 @@ def publish_snapshot(
     next_snapshot: dict[str, str],
     message: str,
 ) -> str {
-    remote_head: str = repo_head(owner, repo, branch);
-    if remote_head != expected_head {
-        raise Exception(f"GitHub {branch} advanced outside Synqit (expected {expected_head}, found {remote_head}).");
-    }
-
-    commit = gh_request("GET", f"/repos/{owner}/{repo}/git/commits/{remote_head}");
-    base_tree_sha: str = commit["tree"]["sha"] as str;
-
     paths: set[str] = set(previous_snapshot.keys()) | set(next_snapshot.keys());
     tree_entries: list[dict] = [];
     for path in paths {
@@ -109,17 +133,30 @@ def publish_snapshot(
         blob = gh_request("POST", f"/repos/{owner}/{repo}/git/blobs", {"content": next_content, "encoding": "utf-8"});
         tree_entries.append({"path": path, "mode": "100644", "type": "blob", "sha": blob["sha"]});
     }
+    return commit_tree_entries(owner, repo, branch, expected_head, tree_entries, message);
+}
 
-    if not tree_entries {
-        return remote_head;
+"""Publish an explicit set of changes - path -> new content, or path -> None
+for a deletion. No diffing: the caller (integrate) already knows exactly what
+it touched or deleted, so this skips fetching a full snapshot to compare
+against."""
+def publish_changes(
+    owner: str,
+    repo: str,
+    branch: str,
+    expected_head: str,
+    changes: dict[str, str | None],
+    message: str,
+) -> str {
+    tree_entries: list[dict] = [];
+    for path in changes.keys() {
+        content = changes[path];
+        if content is None {
+            tree_entries.append({"path": path, "mode": "100644", "type": "blob", "sha": None});
+            continue;
+        }
+        blob = gh_request("POST", f"/repos/{owner}/{repo}/git/blobs", {"content": content, "encoding": "utf-8"});
+        tree_entries.append({"path": path, "mode": "100644", "type": "blob", "sha": blob["sha"]});
     }
-
-    next_tree = gh_request("POST", f"/repos/{owner}/{repo}/git/trees", {"base_tree": base_tree_sha, "tree": tree_entries});
-    next_commit = gh_request("POST", f"/repos/{owner}/{repo}/git/commits", {
-        "message": f"synqit: {message}",
-        "tree": next_tree["sha"],
-        "parents": [remote_head],
-    });
-    gh_request("PATCH", f"/repos/{owner}/{repo}/git/refs/heads/{branch}", {"sha": next_commit["sha"], "force": False});
-    return next_commit["sha"] as str;
+    return commit_tree_entries(owner, repo, branch, expected_head, tree_entries, message);
 }

@@ -125,6 +125,9 @@ walker integrate {
         }
 
         push.status = "integrated";
+        push.touched_paths = touched_paths;
+        push.deleted_paths = ws.deleted;
+        push.summary = result.summary;
         report {
             "status": "integrated",
             "summary": result.summary,

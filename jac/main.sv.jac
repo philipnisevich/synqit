@@ -6,3 +6,4 @@ import from walkers.project { create_project }
 import from walkers.seed_project { seed_project }
 import from walkers.blast_radius { blast_radius }
 import from walkers.integrate { integrate }
+import from walkers.publish { publish }
