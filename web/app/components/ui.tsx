@@ -111,7 +111,7 @@ export function FaqItem({ q, a }: { q: string; a: string }) {
         {q}
         <span className="shrink-0 text-muted transition group-open:rotate-45">+</span>
       </summary>
-      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">{a}</p>
+      <p className="faq-answer mt-2 max-w-2xl text-sm leading-relaxed text-muted">{a}</p>
     </details>
   );
 }

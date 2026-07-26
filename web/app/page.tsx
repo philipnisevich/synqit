@@ -458,7 +458,9 @@ export default function Home() {
           <h2 className="mt-4 font-display text-4xl sm:text-5xl">
             From clone to shared main in one command.
           </h2>
-          <div className="mx-auto mt-8 max-w-md text-left">
+          {/* max-w-xl, not md: the clone URL needs ~533px to sit on one line,
+              so a narrower box forces a horizontal scroll just to copy it. */}
+          <div className="mx-auto mt-8 max-w-xl text-left">
             <TerminalWindow
               lines={[
                 { text: "git clone https://github.com/julianshekhtmeyster/synqit-hack.git" },

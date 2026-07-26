@@ -143,6 +143,26 @@ h3 {
  * exactly the notch. There is deliberately no border or seam — it has to read as
  * hardware, not as a panel parked underneath one.
  */
+/*
+ * FAQ answers ease in instead of snapping. <details> has no transition on open,
+ * so this runs as a keyframe on the answer itself. Collapsing stays instant —
+ * that is the browser's own behaviour and animating it needs JS.
+ */
+@keyframes faq-answer-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+details[open] > .faq-answer {
+  animation: faq-answer-in 340ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 .notch-shell {
   width: 120px;
   height: 26px;
