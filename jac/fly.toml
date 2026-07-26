@@ -1,0 +1,28 @@
+# Fly.io deployment for the Synqit Jac service.
+# One always-on machine, no auto-scaling: Jac's default persistence backend
+# (SQLite in .jac/data) doesn't support multiple machines writing to the same
+# file. The mounted volume is what makes the graph survive restarts/redeploys
+# instead of resetting to empty every time.
+
+app = "synqit-hack"
+primary_region = "iad"
+
+[build]
+
+[env]
+PORT = "8080"
+
+[http_service]
+internal_port = 8080
+force_https = true
+auto_stop_machines = false
+auto_start_machines = true
+min_machines_running = 1
+
+[[mounts]]
+source = "synqit_data"
+destination = "/app/jac/.jac"
+
+[[vm]]
+size = "shared-cpu-1x"
+memory = "512mb"

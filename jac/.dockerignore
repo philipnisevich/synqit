@@ -1,0 +1,5 @@
+.env
+.jac/
+__pycache__/
+*.pyc
+jac.local.toml
