@@ -118,95 +118,97 @@ def find_broken_references(original: dict[str, str], updated: dict[str, str]) ->
     return broken;
 }
 
+"""Plain function (not walker-spawn-only) so the `push` walker can call it
+directly - same nested-spawn lesson as blast_radius/compute_blast_radius."""
+def do_integrate(push_id: str, max_hops: int) -> dict {
+    push = jobj(push_id);
+    if not isinstance(push, PushRequest) {
+        return {"error": "push_not_found", "push_id": push_id};
+    }
+
+    projects: list[Project] = [push <-- [?:Project]];
+    if not projects {
+        return {"error": "project_not_found_for_push"};
+    }
+    proj = projects[0];
+
+    context_files: list[BlastFile] = compute_blast_radius(push_id, max_hops);
+
+    workspace_files: dict[str, str] = {};
+    for f in context_files {
+        workspace_files[f.path] = f.content;
+    }
+    original_files: dict[str, str] = dict(workspace_files);
+    ws = Workspace(files=dict(workspace_files));
+
+    result = ws.integrate(intent=push.intent, proposed_changes=push.changes);
+
+    if result.status == "needs_human" {
+        push.status = "needs_human";
+        return {"status": "needs_human", "reason": result.reason};
+    }
+
+    broken = find_broken_references(original_files, ws.files);
+    attempts: int = 0;
+    while broken and attempts < 2 {
+        fix_notes: list[str] = [];
+        for path in broken.keys() {
+            syms: str = ", ".join(broken[path]);
+            fix_notes.append(path + " still references removed/renamed: " + syms);
+        }
+        follow_up_intent = push.intent + "\n\nVerification found unfinished work - fix these exactly: " + "; ".join(fix_notes);
+        result = ws.integrate(intent=follow_up_intent, proposed_changes=push.changes);
+        broken = find_broken_references(original_files, ws.files);
+        attempts += 1;
+    }
+
+    if broken {
+        push.status = "integration_incomplete";
+        return {
+            "status": "integration_incomplete",
+            "reason": "Deterministic check still finds broken references after retries.",
+            "broken": broken,
+        };
+    }
+
+    touched_paths: list[str] = [];
+    for file_path in ws.files.keys() {
+        new_content: str = ws.files[file_path];
+        existing = [proj -->[?:File, path == file_path]];
+        if existing {
+            file_node = existing[0];
+            file_node.content = new_content;
+        } else {
+            file_node = (proj ++> File(path=file_path, content=new_content))[0];
+        }
+        touched_paths.append(file_path);
+    }
+
+    for deleted_path in ws.deleted {
+        gone = [proj -->[?:File, path == deleted_path]];
+        for g in gone {
+            del g;
+        }
+    }
+
+    push.status = "integrated";
+    push.touched_paths = touched_paths;
+    push.deleted_paths = ws.deleted;
+    push.summary = result.summary;
+    return {
+        "status": "integrated",
+        "summary": result.summary,
+        "activity": ws.activity,
+        "files_touched": touched_paths,
+        "files_deleted": ws.deleted,
+    };
+}
+
 walker integrate {
     has push_id: str;
     has max_hops: int = 2;
 
     can run with Root entry {
-        push = jobj(self.push_id);
-        if not isinstance(push, PushRequest) {
-            report {"error": "push_not_found", "push_id": self.push_id};
-            disengage;
-        }
-
-        projects: list[Project] = [push <-- [?:Project]];
-        if not projects {
-            report {"error": "project_not_found_for_push"};
-            disengage;
-        }
-        proj = projects[0];
-
-        context_files: list[BlastFile] = compute_blast_radius(self.push_id, self.max_hops);
-
-        workspace_files: dict[str, str] = {};
-        for f in context_files {
-            workspace_files[f.path] = f.content;
-        }
-        original_files: dict[str, str] = dict(workspace_files);
-        ws = Workspace(files=dict(workspace_files));
-
-        result = ws.integrate(intent=push.intent, proposed_changes=push.changes);
-
-        if result.status == "needs_human" {
-            push.status = "needs_human";
-            report {"status": "needs_human", "reason": result.reason};
-            disengage;
-        }
-
-        broken = find_broken_references(original_files, ws.files);
-        attempts: int = 0;
-        while broken and attempts < 2 {
-            fix_notes: list[str] = [];
-            for path in broken.keys() {
-                syms: str = ", ".join(broken[path]);
-                fix_notes.append(path + " still references removed/renamed: " + syms);
-            }
-            follow_up_intent = push.intent + "\n\nVerification found unfinished work - fix these exactly: " + "; ".join(fix_notes);
-            result = ws.integrate(intent=follow_up_intent, proposed_changes=push.changes);
-            broken = find_broken_references(original_files, ws.files);
-            attempts += 1;
-        }
-
-        if broken {
-            push.status = "integration_incomplete";
-            report {
-                "status": "integration_incomplete",
-                "reason": "Deterministic check still finds broken references after retries.",
-                "broken": broken,
-            };
-            disengage;
-        }
-
-        touched_paths: list[str] = [];
-        for file_path in ws.files.keys() {
-            new_content: str = ws.files[file_path];
-            existing = [proj -->[?:File, path == file_path]];
-            if existing {
-                file_node = existing[0];
-                file_node.content = new_content;
-            } else {
-                file_node = (proj ++> File(path=file_path, content=new_content))[0];
-            }
-            touched_paths.append(file_path);
-        }
-
-        for deleted_path in ws.deleted {
-            gone = [proj -->[?:File, path == deleted_path]];
-            for g in gone {
-                del g;
-            }
-        }
-
-        push.status = "integrated";
-        push.touched_paths = touched_paths;
-        push.deleted_paths = ws.deleted;
-        push.summary = result.summary;
-        report {
-            "status": "integrated",
-            "summary": result.summary,
-            "activity": ws.activity,
-            "files_touched": touched_paths,
-            "files_deleted": ws.deleted,
-        };
+        report do_integrate(self.push_id, self.max_hops);
     }
 }
