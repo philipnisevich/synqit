@@ -1,6 +1,11 @@
-# Build artifacts and vendored code - not ours to compile or lint.
+# Build artifacts and vendored code
 .jac/
 node_modules/
 
-# The Next.js marketing site is its own toolchain, not part of the Jac app.
+# The Next.js marketing site is its own toolchain
 web/
+
+# The jac/ backend subdirectory has its own jac.toml and entry point.
+# Its walkers and nodes are not part of the fullstack app at the root.
+walkers/
+jac/
