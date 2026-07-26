@@ -11,6 +11,7 @@ walker create_project {
     has branch: str = "main";
 
     can run with Root entry {
+        grant(root.shared, level=WritePerm);
         existing = [root.shared -->[?:Project, name == self.name]];
         if existing {
             report {"project": self.name, "status": "already_exists"};
