@@ -1,0 +1,9 @@
+node_modules/
+.tmp-*/
+.synqit/
+.env
+__pycache__/
+*.pyc
+.jac_cache/
+HACKATHON_CONTEXT.md
+
