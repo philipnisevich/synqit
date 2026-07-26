@@ -26,10 +26,10 @@ def:pub NewProject() -> JsxElement {
                 submitting = False;
                 return;
             }
-            # Full reload rather than navigate("/"): the client runtime caches
+            # Full reload rather than navigate("/app"): the client runtime caches
             # reader responses for 60s and the Dashboard's list_projects call
             # is a reader, so a soft navigation can land on a stale empty list.
-            window.location.href = "/";
+            window.location.href = "/app";
         } except Exception as e {
             error = str(e);
             submitting = False;

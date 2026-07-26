@@ -31,12 +31,16 @@ cl {
     import from .components.Dashboard { Dashboard }
     import from .components.NewProject { NewProject }
     import from .components.ProjectDetail { ProjectDetail }
+    import from .components.landing.Landing { Landing }
     import from "@jac/runtime" { Router, Routes, Route, Navigate }
 
     def:pub app() -> JsxElement {
+        # "/" is the marketing landing page - it is what a first-time visitor
+        # hitting the deployed URL should see. The dashboard moved to "/app".
         return <Router>
             <Routes>
-                <Route path="/" element={<Dashboard />} />
+                <Route path="/" element={<Landing />} />
+                <Route path="/app" element={<Dashboard />} />
                 <Route path="/new-project" element={<NewProject />} />
                 <Route path="/project/:name" element={<ProjectDetail />} />
                 <Route path="*" element={<Navigate to="/" />} />

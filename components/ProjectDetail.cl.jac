@@ -150,7 +150,7 @@ def:pub ProjectDetail() -> JsxElement {
 
     return <div className="flex flex-col gap-6 pt-6 pb-6 pl-6 pr-6">
         <div className="flex items-center gap-3">
-            <Link to="/">
+            <Link to="/app">
                 <Button variant="ghost" size="icon">
                     <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} className="size-4" />
                 </Button>

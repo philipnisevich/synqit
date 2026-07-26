@@ -34,6 +34,9 @@ clsx = "latest"
 "lucide-react" = "latest"
 "tw-animate-css" = "latest"
 "@fontsource-variable/inter" = "latest"
+# Landing page: smooth scrolling and scroll-triggered reveals.
+gsap = "latest"
+lenis = "latest"
 
 [dependencies.npm.dev]
 tailwindcss = "latest"
