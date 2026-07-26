@@ -49,10 +49,12 @@ def do_get_project(wanted: str) -> dict {
     }
     proj = existing[0];
     return {
+        "id": jid(proj),
         "project": proj.name,
         "repository": proj.repository,
         "branch": proj.branch,
         "head": proj.head,
+        "created_at": proj.created_at,
     };
 }
 
