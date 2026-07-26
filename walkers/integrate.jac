@@ -189,6 +189,13 @@ def do_integrate(push_id: str, max_hops: int) -> dict {
     touched_paths: list[str] = [];
     for file_path in ws.files.keys() {
         new_content: str = ws.files[file_path];
+        # The workspace holds the whole blast radius, most of which the LLM
+        # only read. Recording every one of them as "touched" made publish
+        # re-upload the entire context as blobs on every push and handed the
+        # CLI a sync list of files that never changed.
+        if original_files.get(file_path) == new_content {
+            continue;
+        }
         existing = [proj -->[?:File, path == file_path]];
         if existing {
             file_node = existing[0];
