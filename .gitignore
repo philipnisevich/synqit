@@ -7,4 +7,5 @@ __pycache__/
 .jac_cache/
 HACKATHON_CONTEXT.md
 .DS_Store
+.jac/
 
