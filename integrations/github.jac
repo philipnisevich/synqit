@@ -51,14 +51,27 @@ def snapshot_at(owner: str, repo: str, commit_sha: str) -> dict[str, str] {
     for entry in entries {
         blob = gh_request("GET", f"/repos/{owner}/{repo}/git/blobs/{entry['sha']}");
         raw: str = blob["content"] as str;
-        contents[entry["path"]] = base64_decode(raw.replace("\n", ""));
+        decoded = base64_decode(raw.replace("\n", ""));
+        if decoded is None {
+            continue;
+        }
+        contents[entry["path"]] = decoded;
     }
     return contents;
 }
 
-def base64_decode(value: str) -> str {
+"""Returns None for blobs that aren't UTF-8 text (images, fonts, compiled
+artifacts). Synqit is a text pipeline end to end - the LLM integrates source
+and publish_* sends content back with `encoding: "utf-8"` - so a binary file
+could never round-trip intact. Skipping it keeps it untouched on GitHub;
+including it would have corrupted it on the next publish."""
+def base64_decode(value: str) -> str | None {
     import base64;
-    return base64.b64decode(value).decode("utf-8");
+    try {
+        return base64.b64decode(value).decode("utf-8");
+    } except UnicodeDecodeError {
+        return None;
+    }
 }
 
 """Read the current state of `branch` on GitHub. Returns the head sha and a
