@@ -1,3 +1,5 @@
+import { HeroPanel } from "./components/HeroPanel";
+import { Logo } from "./components/Logo";
 import { Nav } from "./components/Nav";
 import { NotchMock } from "./components/NotchMock";
 import { TerminalWindow } from "./components/TerminalWindow";
@@ -26,18 +28,6 @@ const FEATURES = [
   {
     title: "Precedent memory",
     body: "Once you've decided a concept, the same question isn't asked twice — even from a different file.",
-  },
-  {
-    title: "Full audit trail",
-    body: "Every push, every decision, every commit — attributed and written into the history, not a side log.",
-  },
-  {
-    title: "Timeout safety",
-    body: "An unanswered question expires in five minutes. Your local work is never touched.",
-  },
-  {
-    title: "Per-developer identity",
-    body: "Scoped tokens. Nobody sees or resolves a conflict that isn't theirs.",
   },
   {
     title: "GitHub-backed",
@@ -99,20 +89,17 @@ export default function Home() {
       <Nav />
 
       {/* Hero — copy on the left over the sky, install command on the right */}
-      <section className="hero-art relative isolate">
-        <div className="hero-veil px-6 pt-36 pb-28 sm:pt-44">
-          <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-16">
+      <section className="hero-art relative isolate min-h-svh">
+        <div className="hero-veil flex min-h-svh flex-col justify-center px-6 pt-36 pb-28 sm:pt-44">
+          <div className="mx-auto grid w-full max-w-6xl items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-16">
             <div>
-              <span className="inline-block rounded-full border border-black/[0.07] bg-white/75 px-3.5 py-1.5 text-[13px] text-text shadow-sm backdrop-blur">
-                Open source · self-hosted
-              </span>
-              <h1 className="mt-6 font-display text-5xl leading-[1.08] sm:text-[58px]">
+              <h1 className="font-display text-5xl leading-[1.08] sm:text-[58px]">
                 One shared <span className="text-accent italic">main</span>, no
                 branches <span className="text-accent italic">to review.</span>
               </h1>
               <p className="mt-6 max-w-lg text-[17px] leading-relaxed text-text/70">
                 Push a feature. An agent integrates it into the newest main. When it hits a
-                decision only you can make — not a merge conflict, a product one — it asks.
+                decision only you can make, not a merge conflict but a product one, it asks.
                 Right in your notch.
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -134,20 +121,10 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="lg:pl-4">
-              <TerminalWindow
-                lines={[
-                  { text: "git clone https://github.com/ben564885/bens-attempt.git" },
-                  { text: "cd bens-attempt && make server", dim: "  # listens on :8899" },
-                  { text: 'synqit push "add avatars"' },
-                  { prompt: false, text: "→ integrated onto main", dim: "  a91f3c2" },
-                ]}
-              />
-              <p className="mt-3 flex justify-center">
-                <span className="rounded-full bg-white/75 px-3 py-1 text-[13px] text-text/75 backdrop-blur">
-                  Two commands to a running server. No account, no signup.
-                </span>
-              </p>
+            {/* min-w-0 lets the terminal's own overflow-x-auto engage instead of
+                the pre-formatted lines widening the whole grid track. */}
+            <div className="min-w-0 lg:pl-4">
+              <HeroPanel />
             </div>
           </div>
         </div>
@@ -158,40 +135,8 @@ export default function Home() {
         <NotchMock />
       </section>
 
-      {/* Quickstart */}
-      <section id="quickstart" className="py-20">
-        <div className="mx-auto grid max-w-6xl items-center gap-12 px-6 lg:grid-cols-2 lg:gap-20">
-          <div>
-            <Eyebrow>Quickstart</Eyebrow>
-            <h2 className="mt-4 font-display text-4xl">Running in one command.</h2>
-            <p className="mt-4 max-w-md text-[15px] leading-relaxed text-muted">
-              Open source. Self-hosted. The first run walks you through your GitHub token and
-              OpenRouter key — every run after that just listens.
-            </p>
-            <div className="mt-6 flex items-center gap-5">
-              <a
-                href="https://github.com/ben564885/bens-attempt"
-                className="rounded-full bg-text px-4 py-2 text-sm font-medium text-white transition hover:opacity-85"
-              >
-                ★ Star on GitHub
-              </a>
-              <a href="#faq" className="text-sm font-medium text-text hover:text-accent">
-                Read the docs →
-              </a>
-            </div>
-          </div>
-          <TerminalWindow
-            lines={[
-              { text: "git clone https://github.com/ben564885/bens-attempt.git" },
-              { text: "cd bens-attempt && make server", dim: "  # listens on :8899" },
-            ]}
-          />
-        </div>
-      </section>
-
-
       {/* How it works */}
-      <section id="how-it-works" className="py-20">
+      <section id="how-it-works" data-reveal className="py-20">
         <div className="mx-auto max-w-6xl px-6">
           <div className="max-w-xl">
             <Eyebrow>How it works</Eyebrow>
@@ -233,7 +178,7 @@ export default function Home() {
       </section>
 
       {/* Status mock / second big visual */}
-      <section className="py-10">
+      <section data-reveal className="py-10">
         <div className="mx-auto max-w-6xl px-6 text-center">
           <h2 className="font-display text-3xl sm:text-4xl">
             See your workspace, not your diff.
@@ -256,7 +201,7 @@ export default function Home() {
 
 
       {/* Features grid */}
-      <section id="features" className="py-20">
+      <section id="features" data-reveal className="py-20">
         <div className="mx-auto max-w-6xl px-6">
           <SectionHead
             eyebrow="Features"
@@ -435,7 +380,7 @@ export default function Home() {
 
 
       {/* Open source */}
-      <section className="py-20">
+      <section data-reveal className="py-20">
         <div className="mx-auto max-w-6xl px-6">
           <SectionHead
             eyebrow="Open source"
@@ -461,7 +406,7 @@ export default function Home() {
       </section>
 
       {/* Roadmap */}
-      <section className="py-20">
+      <section data-reveal className="py-20">
         <div className="mx-auto max-w-6xl px-6">
           <Eyebrow>Roadmap</Eyebrow>
           <h2 className="mt-4 font-display text-4xl">
@@ -480,7 +425,9 @@ export default function Home() {
               </div>
             ))}
             <a
-              href="https://github.com/ben564885/bens-attempt"
+              target="_blank"
+              rel="noopener noreferrer"
+              href="https://github.com/julianshekhtmeyster/synqit-hack"
               className="flex items-center justify-center rounded-xl border border-border p-5 text-sm font-medium text-text hover:border-accent/50"
             >
               Suggest a surface →
@@ -491,7 +438,7 @@ export default function Home() {
 
 
       {/* FAQ */}
-      <section id="faq" className="py-20">
+      <section id="faq" data-reveal className="py-20">
         <div className="mx-auto max-w-3xl px-6">
           <Eyebrow>FAQ</Eyebrow>
           <h2 className="mt-4 font-display text-4xl">Questions, answered.</h2>
@@ -503,18 +450,21 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Final CTA */}
-      <section className="bg-surface-2 py-24 text-center">
+      {/* Final CTA — also the #quickstart target, since the dedicated quickstart
+          section duplicated the hero panel and was removed. */}
+      <section id="quickstart" data-reveal className="bg-surface-2 py-24 text-center">
         <div className="mx-auto max-w-2xl px-6">
           <Eyebrow>Get started</Eyebrow>
           <h2 className="mt-4 font-display text-4xl sm:text-5xl">
             From clone to shared main in one command.
           </h2>
-          <div className="mx-auto mt-8 max-w-md text-left">
+          {/* max-w-xl, not md: the clone URL needs ~533px to sit on one line,
+              so a narrower box forces a horizontal scroll just to copy it. */}
+          <div className="mx-auto mt-8 max-w-xl text-left">
             <TerminalWindow
               lines={[
-                { text: "git clone https://github.com/ben564885/bens-attempt.git" },
-                { text: "cd bens-attempt && make server" },
+                { text: "git clone https://github.com/julianshekhtmeyster/synqit-hack.git" },
+                { text: "cd synqit-hack && make server" },
               ]}
             />
           </div>
@@ -524,7 +474,9 @@ export default function Home() {
           </p>
           <div className="mt-6 flex items-center justify-center gap-3">
             <a
-              href="https://github.com/ben564885/bens-attempt"
+              target="_blank"
+              rel="noopener noreferrer"
+              href="https://github.com/julianshekhtmeyster/synqit-hack"
               className="rounded-full bg-text px-4 py-2 text-sm font-medium text-white transition hover:opacity-85"
             >
               ★ Star on GitHub
@@ -537,16 +489,11 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="mt-auto border-t border-border bg-surface-2/60 py-16 text-muted">
+      <footer className="footer-art relative isolate mt-auto border-t border-border py-16 text-muted">
         <div className="mx-auto max-w-6xl px-6">
           <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <p className="flex items-center gap-2 font-mono text-sm text-text">
-                <span className="relative inline-flex h-4 w-7 items-center justify-center rounded-full bg-text">
-                  <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-                </span>
-                synqit
-              </p>
+              <Logo height={18} className="text-text" />
               <p className="mt-3 max-w-[22ch] text-sm text-muted">
                 A conflict becomes a question, not a rejected push.
               </p>
@@ -596,7 +543,9 @@ export default function Home() {
               </p>
               <ul className="mt-3 space-y-2 text-sm">
                 <li>
-                  <a href="https://github.com/ben564885/bens-attempt" className="hover:text-text">
+                  <a target="_blank"
+  rel="noopener noreferrer"
+  href="https://github.com/julianshekhtmeyster/synqit-hack" className="hover:text-text">
                     GitHub
                   </a>
                 </li>

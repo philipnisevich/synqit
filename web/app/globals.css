@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "lenis/dist/lenis.css";
 
 :root {
   --bg: #fbfaf7;
@@ -37,7 +38,9 @@
 html {
   /* Light only — the site is designed around the cream palette. */
   color-scheme: light;
-  scroll-behavior: smooth;
+  /* Lenis drives scrolling; native smooth scroll fights its animation. The
+     reduced-motion block below already forces this off, where Lenis bails out. */
+  scroll-behavior: auto;
 }
 
 body {
@@ -99,6 +102,82 @@ h3 {
       rgba(251, 250, 247, 0.32) 62%,
       transparent 85%
     );
+}
+
+/*
+ * Footer bookends the hero with the same pixel sky. The image anchors to its
+ * top edge here (the hero anchors to the bottom), so the page opens on the
+ * treeline and closes on the clouds. The cream wash sits heavy — footer type is
+ * small and muted, and has to stay readable over the busiest part of the art.
+ */
+.footer-art {
+  background-color: #8ed7f7;
+  background-image:
+    linear-gradient(
+      to bottom,
+      var(--bg) 0%,
+      rgba(251, 250, 247, 0.88) 14%,
+      rgba(251, 250, 247, 0.84) 58%,
+      rgba(251, 250, 247, 0.66) 100%
+    ),
+    url("/bggggagain.png");
+  background-position:
+    center top,
+    center top;
+  background-repeat: no-repeat;
+  background-size:
+    cover,
+    cover;
+  image-rendering: pixelated;
+}
+
+/* The type is not pixel art — keep it smooth over the pixelated layer. */
+.footer-art > * {
+  image-rendering: auto;
+}
+
+/*
+ * The escalation IS the notch, the way a real macOS notch HUD works: one
+ * continuous black shape flush with the top of the screen that widens and grows
+ * downward, occluding the menu bar as it goes. Closed, its dimensions are
+ * exactly the notch. There is deliberately no border or seam — it has to read as
+ * hardware, not as a panel parked underneath one.
+ */
+/*
+ * FAQ answers ease in instead of snapping. <details> has no transition on open,
+ * so this runs as a keyframe on the answer itself. Collapsing stays instant —
+ * that is the browser's own behaviour and animating it needs JS.
+ */
+@keyframes faq-answer-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+details[open] > .faq-answer {
+  animation: faq-answer-in 340ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.notch-shell {
+  width: 120px;
+  height: 26px;
+  overflow: hidden;
+  border-end-start-radius: 10px;
+  border-end-end-radius: 10px;
+  background: #000;
+  box-shadow: 0 24px 50px -18px rgb(0 0 0 / 0.85);
+}
+
+@media (min-width: 640px) {
+  .notch-shell {
+    width: 150px;
+    height: 30px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
