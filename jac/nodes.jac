@@ -30,8 +30,8 @@ node PushRequest {
     has created_at: str = "";
 }
 
-edge Imports {}
+edge Imports: File --> File {}
 
-edge Touches {
+edge Touches: PushRequest --> File {
     has change_type: str = "modified";
 }
