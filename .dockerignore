@@ -1,0 +1,10 @@
+.env
+.jac/
+__pycache__/
+*.pyc
+jac.local.toml
+node_modules/
+.git/
+.synqit/
+web/node_modules/
+web/.next/

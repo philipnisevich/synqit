@@ -9,7 +9,7 @@ import from workspace { changed_files, hashes_for, load_state, read_tracked_work
 import from server_env { verify_github_token, verify_anthropic_key, write_env_file }
 import from ui { bold, cyan, gray, step, ok, info, fail }
 
-glob DEFAULT_BASE: str = "http://localhost:8899";
+glob DEFAULT_BASE: str = "http://localhost:8000";
 
 def require_session -> dict {
     cfg = load_config();
@@ -80,7 +80,7 @@ def cmd_login(base_flag: str | None, username_flag: str | None, password_flag: s
 
 """Sets up the SERVER's credentials (GITHUB_TOKEN, ANTHROPIC_API_KEY) - not
 this CLI's login. Run from wherever you'll run `jac start` (normally the
-jac/ directory) since that's where the .env it writes needs to live.
+repo root) since that's where the .env it writes needs to live.
 Verifies both credentials against their real providers BEFORE saving
 anything - a bad token never gets written, so the server can never start
 believing it has working credentials when it doesn't."""
@@ -133,7 +133,7 @@ def cmd_configure(jac_dir_flag: str | None, github_token_flag: str | None, anthr
 
     write_env_file(env_path, {"GITHUB_TOKEN": github_token, "ANTHROPIC_API_KEY": anthropic_key});
     ok("saved verified credentials to " + env_path);
-    info(gray("    Start the server with: cd " + jac_dir + " && jac start main.sv.jac --port 8899 --no_client"));
+    info(gray("    Start the server with: cd " + jac_dir + " && jac start main.jac"));
 }
 
 def cmd_init(project_arg: str | None, branch_flag: str | None, github_flag: str | None) {
@@ -320,7 +320,7 @@ def cmd_repair {
 def cmd_help {
     print(bold("synqit") + " - shared source control without branches, commits, or pulls\n");
     print(bold("Usage"));
-    print("  synqit configure                 Set up the SERVER's GitHub token + Anthropic key (run once, from jac/)");
+    print("  synqit configure                 Set up the SERVER's GitHub token + Anthropic key (run once, from the repo root)");
     print("  synqit login [--base <url>]      Log in (or create an account) on a Synqit server");
     print("  synqit init [project]            Connect this repo root to Synqit");
     print("  synqit push \"feature intent\"     Submit a feature and sync this workspace");
@@ -328,7 +328,7 @@ def cmd_help {
     print("  synqit repair                    Restore this workspace to shared GitHub main");
     print("  synqit help                      Show this help\n");
     print(bold("Example"));
-    print("  cd jac && synqit configure");
+    print("  synqit configure                 # from the repo root, on the machine hosting the server");
     print("  synqit login --base https://synqit.example");
     print("  synqit init hackathon-demo");
     print("  synqit push \"Add password validation\"");

@@ -7,5 +7,9 @@ __pycache__/
 .jac_cache/
 HACKATHON_CONTEXT.md
 .DS_Store
-.jac/
 
+# Jac build/data directory: compiled client bundle, venv, and the SQLite
+# graph. Never commit - the graph is per-deployment state.
+.jac/
+jac.local.toml
+*.log

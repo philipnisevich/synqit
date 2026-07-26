@@ -7,6 +7,7 @@ per-user. do_ingest_push is a plain function (not walker-spawn-only) so the
 """
 
 def do_ingest_push(project: str, intent: str, base_sha: str, changes: list[dict], submitter: str) -> dict {
+    import from datetime { datetime, timezone }
     projects = [root.shared -->[?:Project, name == project]];
     if not projects {
         return {"error": "project_not_found", "project": project};
@@ -18,6 +19,7 @@ def do_ingest_push(project: str, intent: str, base_sha: str, changes: list[dict]
         base_sha=base_sha,
         changes=changes,
         submitter=submitter,
+        created_at=datetime.now(timezone.utc).isoformat(),
     ))[0];
 
     touched: list[str] = [];
