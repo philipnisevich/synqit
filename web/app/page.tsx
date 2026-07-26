@@ -98,41 +98,63 @@ export default function Home() {
     <div id="top" className="flex min-h-screen flex-col">
       <Nav />
 
-      {/* Hero — artwork band with the headline sitting over its faded lower half */}
+      {/* Hero — copy on the left over the sky, install command on the right */}
       <section className="hero-art relative isolate">
-        <div className="hero-veil px-6 pt-40 pb-20 text-center sm:pt-48">
-          <div className="mx-auto max-w-3xl">
-            <Eyebrow>Open source · self-hosted</Eyebrow>
-            <h1 className="mt-6 font-display text-5xl leading-[1.05] sm:text-[64px]">
-              One shared main.
-              <br />
-              No branches to review.
-            </h1>
-            <p className="mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-muted">
-              Push a feature. An agent integrates it into the newest main. When it hits a
-              decision only you can make — not a merge conflict, a product one — it asks.
-              Right in your notch.
-            </p>
-            <div className="mt-8 flex items-center justify-center gap-3">
-              <a
-                href="#quickstart"
-                className="rounded-full bg-text px-5 py-2.5 text-sm font-medium text-white transition hover:opacity-85"
-              >
-                Get started
-              </a>
-              <a
-                href="https://github.com/ben564885/bens-attempt"
-                className="rounded-full border border-black/10 bg-white/60 px-5 py-2.5 text-sm font-medium text-text backdrop-blur transition hover:bg-white"
-              >
-                GitHub ↗
-              </a>
+        <div className="hero-veil px-6 pt-36 pb-28 sm:pt-44">
+          <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-16">
+            <div>
+              <span className="inline-block rounded-full border border-black/[0.07] bg-white/75 px-3.5 py-1.5 text-[13px] text-text shadow-sm backdrop-blur">
+                Open source · self-hosted
+              </span>
+              <h1 className="mt-6 font-display text-5xl leading-[1.08] sm:text-[58px]">
+                One shared <span className="text-accent italic">main</span>, no
+                branches <span className="text-accent italic">to review.</span>
+              </h1>
+              <p className="mt-6 max-w-lg text-[17px] leading-relaxed text-text/70">
+                Push a feature. An agent integrates it into the newest main. When it hits a
+                decision only you can make — not a merge conflict, a product one — it asks.
+                Right in your notch.
+              </p>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <a
+                  href="#quickstart"
+                  className="rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:opacity-90"
+                >
+                  Get started
+                </a>
+                <a
+                  href="#how-it-works"
+                  className="flex items-center gap-2 rounded-full border border-black/[0.07] bg-white/80 px-5 py-2.5 text-sm font-medium text-text shadow-sm backdrop-blur transition hover:bg-white"
+                >
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full border border-current text-[9px]">
+                    ▶
+                  </span>
+                  See how it works
+                </a>
+              </div>
+            </div>
+
+            <div className="lg:pl-4">
+              <TerminalWindow
+                lines={[
+                  { text: "git clone https://github.com/ben564885/bens-attempt.git" },
+                  { text: "cd bens-attempt && make server", dim: "  # listens on :8899" },
+                  { text: 'synqit push "add avatars"' },
+                  { prompt: false, text: "→ integrated onto main", dim: "  a91f3c2" },
+                ]}
+              />
+              <p className="mt-3 flex justify-center">
+                <span className="rounded-full bg-white/75 px-3 py-1 text-[13px] text-text/75 backdrop-blur">
+                  Two commands to a running server. No account, no signup.
+                </span>
+              </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* The escalation itself, lifted onto the seam under the hero */}
-      <section className="px-6 pb-24">
+      {/* The escalation itself */}
+      <section className="px-6 py-24">
         <NotchMock />
       </section>
 

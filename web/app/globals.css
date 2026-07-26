@@ -7,7 +7,7 @@
   --text: #16171a;
   --text-muted: #6b6d73;
   --border: #e6e3db;
-  --accent: #c1791e;
+  --accent: #1d74ab;
   --accent-contrast: #ffffff;
   --ok: #2f8f5b;
   --danger: #c1502e;
@@ -63,26 +63,42 @@ h3 {
 }
 
 /*
- * Hero artwork. The illustration's own paper-white ground is matched by the
- * background-color below, so the edges blend instead of banding.
+ * Hero artwork — pixel-art sky with a treeline along the bottom.
+ *
+ * Anchored to the bottom so the horizon lands on the band's lower edge and the
+ * open sky fills the space the headline sits in. `pixelated` keeps the art
+ * crisp when it scales past its native 1200px rather than smearing the pixels.
  */
 .hero-art {
-  background-color: #f0efec;
-  background-image: url("/backg.png");
-  background-position: center 38%;
+  background-color: #8ed7f7;
+  background-image: url("/bggggagain.png");
+  background-position: center bottom;
   background-repeat: no-repeat;
   background-size: cover;
+  image-rendering: pixelated;
 }
 
-/* Fades the artwork into the page so the headline stays readable over it. */
+/*
+ * Scrim for the text column: heaviest on the left where the copy sits, clearing
+ * to nothing on the right so the clouds stay legible behind the product shot.
+ * The second layer closes the band into the page background at the very bottom.
+ */
 .hero-veil {
-  background: linear-gradient(
-    to bottom,
-    rgba(251, 250, 247, 0.1) 0%,
-    rgba(251, 250, 247, 0.55) 42%,
-    rgba(251, 250, 247, 0.92) 72%,
-    var(--bg) 100%
-  );
+  background:
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      transparent 95%,
+      rgba(251, 250, 247, 0.35) 99%,
+      var(--bg) 100%
+    ),
+    linear-gradient(
+      to right,
+      rgba(251, 250, 247, 0.92) 0%,
+      rgba(251, 250, 247, 0.78) 34%,
+      rgba(251, 250, 247, 0.32) 62%,
+      transparent 85%
+    );
 }
 
 @media (prefers-reduced-motion: reduce) {

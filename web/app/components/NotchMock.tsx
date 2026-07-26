@@ -3,7 +3,7 @@ export function NotchMock() {
     <div className="mx-auto w-full max-w-lg">
       <div className="flex justify-center">
         <div className="flex h-7 w-36 items-center justify-center gap-2 rounded-b-2xl bg-black">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#e3a458] motion-reduce:animate-none" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent motion-reduce:animate-none" />
           <span className="h-1 w-10 rounded-full bg-white/10" />
         </div>
       </div>

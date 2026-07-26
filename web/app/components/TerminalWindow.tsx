@@ -9,7 +9,7 @@ export function TerminalWindow({ lines }: { lines: { prompt?: boolean; text: str
       <div className="px-4 py-4 font-mono text-[13px] leading-relaxed whitespace-pre">
         {lines.map((line, i) => (
           <div key={i} className="text-[#d8d9dc]">
-            {line.prompt !== false && <span className="text-[#e3a458]">$ </span>}
+            {line.prompt !== false && <span className="text-accent">$ </span>}
             {line.text}
             {line.dim && <span className="text-[#5b5d63]">{line.dim}</span>}
           </div>
