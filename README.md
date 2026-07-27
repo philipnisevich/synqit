@@ -39,13 +39,18 @@ Two consequences worth stating plainly:
 ```bash
 git clone https://github.com/philipnisevich/synqit.git
 cd synqit && ./install.sh          # symlinks `synqit` onto your PATH
-export ANTHROPIC_API_KEY=sk-ant-...
 
 cd ~/code/your-project             # any git repo with an 'origin' remote
+synqit configure                   # verifies your key, then saves it
 synqit doctor                      # check everything a push needs
 synqit push --dry-run "Add password validation"
 synqit push "Add password validation"
 ```
+
+`synqit configure` checks the key against the real Anthropic API **before**
+writing anything, saves it to a `.env` at mode 600, and adds that file to
+`.git/info/exclude` first — so a verified key never lands in a committable
+file, and a typo'd one is never saved at all.
 
 `install.sh` links rather than copies, so `git pull` updates the command. It
 also warns if another `synqit` earlier on your PATH would shadow it.
@@ -59,19 +64,21 @@ used as the proposal — a strong hint for what to implement, not a literal patc
 
 | Command | |
 |---|---|
+| `synqit configure` | Verify and save your Anthropic API key |
 | `synqit push "<intent>"` | Make the intent true on the shared branch |
 | `synqit status` | How this workspace differs from it |
 | `synqit doctor` | Check everything a push needs |
 | `--dry-run` | Show the context and proposal, change nothing |
 | `--branch <name>` | Shared branch (default: `main`) |
 | `--hops <n>` | Dependency hops of context (default: `2`) |
+| `--key <value>` | Non-interactive key for `configure` |
 
 ### Where your API key comes from
 
 Precedence is explicit, and `synqit doctor` always tells you which applied:
 
 1. `ANTHROPIC_API_KEY` exported in your environment
-2. a `.env` in the repository you are running against
+2. a `.env` in the repository you are running against (what `configure` writes)
 3. otherwise byLLM may discover one elsewhere on the machine — this works, but
    Synqit warns, because it may not be the account you meant to bill
 

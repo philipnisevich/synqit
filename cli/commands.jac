@@ -12,8 +12,11 @@ the hosted dashboard shares, which is exactly how the two would drift.
 
 import os;
 import sys;
+import getpass;
 
 import from env_guard { key_source, has_accountable_key, REPO_ENV_PATH }
+import from spinner { Spinner, INTEGRATION_PHRASES }
+import from setup_env { verify_anthropic_key, exclude_from_git, write_env_value }
 import from pipeline { run_push, preflight, proposed_changes, PushOutcome }
 import from integrations.local_repo {
     at_repo_root, current_branch, derive_owner_repo, fetch_branch, has_remote,
@@ -31,9 +34,8 @@ def missing_api_key -> str {
     if source == "none" {
         return (
             "No ANTHROPIC_API_KEY. Synqit runs the integration on your machine, "
-            + "so the key stays with you:\n"
-            + "      export ANTHROPIC_API_KEY=sk-ant-...\n"
-            + "    or put it in a .env file in this repository."
+            + "so the key stays with you.\n"
+            + "      Run `synqit configure` to set one up, or export it yourself."
         );
     }
     return "";
@@ -66,6 +68,10 @@ def render_paths(label: str, paths: list[str]) {
 names an explicit next step - a failed push should never leave someone guessing
 what to do, least of all about work that is recoverable but not obvious."""
 def report(outcome: PushOutcome, branch: str) -> int {
+    # The spinner may still be running if the pipeline returned straight out of
+    # the integration phase. Stopping twice is safe; leaving it running would
+    # overwrite the result the developer is waiting to read.
+    ACTIVE_SPINNER.stop();
     status: str = outcome.status;
 
     for warning in outcome.warnings {
@@ -148,10 +154,80 @@ def parse_hops(hops_flag: str | None) -> int {
     return value;
 }
 
-"""Live phase reporting. An integration can take the better part of a minute
-and a retry doubles it, so silence reads as a hang."""
+"""One spinner for the whole push, started when the integration begins and
+stopped the moment any other phase reports. Module-level because the pipeline
+calls back into show_progress with no object to hang state on."""
+glob ACTIVE_SPINNER: Spinner = Spinner();
+
+"""Live phase reporting. The `integrating` phase is the long one - it hands off
+to an animated line so the CLI never looks hung. Every other phase is a plain
+printed step."""
 def show_progress(phase: str, detail: str) {
+    ACTIVE_SPINNER.stop();
+    if phase == "integrating" {
+        ACTIVE_SPINNER.phrases = INTEGRATION_PHRASES;
+        ACTIVE_SPINNER.start();
+        return;
+    }
     step(gray(phase.ljust(12)) + detail);
+}
+
+"""Guided local setup: verify a key against the real API, then save it where
+the CLI will actually look for it."""
+def cmd_configure(key_flag: str | None) {
+    if not at_repo_root() {
+        fail("Run `synqit configure` from the root of the repository Synqit manages.");
+        info(gray("    The key is saved to a .env there, and git-ignored automatically."));
+        sys.exit(1);
+    }
+
+    key: str = (key_flag or "").strip();
+    if not key {
+        stream: any = sys.stdout;
+        if not stream.isatty() {
+            fail("No terminal to prompt on. Pass the key directly: synqit configure --key sk-ant-...");
+            sys.exit(1);
+        }
+        info("");
+        info(bold("  synqit configure"));
+        info(gray("    Synqit runs the integration on this machine, so the key stays here."));
+        info(gray("    Get one at https://console.anthropic.com/settings/keys"));
+        info("");
+        key = getpass.getpass("  Anthropic API key: ").strip();
+    }
+
+    if not key {
+        fail("No key entered. Nothing was saved.");
+        sys.exit(1);
+    }
+
+    step("verifying the key against the Anthropic API");
+    problem: str = verify_anthropic_key(key);
+    if problem {
+        fail(problem);
+        info(gray("    Nothing was saved. Fix the key and run `synqit configure` again."));
+        sys.exit(1);
+    }
+    ok("key verified");
+
+    env_path: str = os.path.join(os.getcwd(), ".env");
+    # Ignore first, write second: if the write succeeded and the ignore failed,
+    # a live key would be sitting in a tracked file waiting to be committed.
+    if not exclude_from_git(".env") {
+        fail("Could not add .env to .git/info/exclude, so the key was NOT saved.");
+        info(gray("    Add `.env` to your .gitignore, then re-run."));
+        sys.exit(1);
+    }
+
+    write_problem: str = write_env_value(env_path, "ANTHROPIC_API_KEY", key);
+    if write_problem {
+        fail(write_problem);
+        sys.exit(1);
+    }
+
+    ok("saved to " + env_path + " (mode 600, git-ignored)");
+    info(gray("    Run `synqit doctor` to confirm, then `synqit push \"...\"`."));
+    sys.exit(0);
 }
 
 def cmd_push(args: list[str], branch_flag: str | None, hops_flag: str | None, dry_run: bool) {
@@ -329,7 +405,7 @@ def cmd_doctor(branch_flag: str | None) {
         "none": "not set",
     }.get(source, source) as str;
     if not check_line("ANTHROPIC_API_KEY", source != "none", key_detail) {
-        blocking.append("export ANTHROPIC_API_KEY=sk-ant-...");
+        blocking.append("synqit configure");
     }
 
     info("");
@@ -354,6 +430,7 @@ def cmd_help {
     info(bold("  synqit") + gray(" - shared source control without branches, commits, or pulls"));
     info("");
     info(bold("  Usage"));
+    info("    synqit configure                 Verify and save your Anthropic API key");
     info("    synqit push \"feature intent\"     Make the intent true on the shared branch");
     info("    synqit status                    Show how this workspace differs from it");
     info("    synqit doctor                    Check everything a push needs");
@@ -363,10 +440,10 @@ def cmd_help {
     info("    --dry-run                        Show the context and proposal, change nothing");
     info("    --branch <name>                  Shared branch (default: main)");
     info("    --hops <n>                       Dependency hops of context (default: 2)");
+    info("    --key <value>                    Non-interactive key for `configure`");
     info("");
-    info(bold("  Setup"));
-    info("    export ANTHROPIC_API_KEY=sk-ant-...");
+    info(bold("  Getting started"));
+    info("    cd <your repo> && synqit configure && synqit doctor");
     info(gray("    Everything runs locally; publishing uses your own git credentials."));
-    info(gray("    Run `synqit doctor` first - it names anything that would block a push."));
     info("");
 }
