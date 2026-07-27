@@ -10,26 +10,26 @@ glob TABS: list[dict[str, str]] = [
     {
         "id": "install",
         "label": "Install",
-        "blurb": "One global install, pointed at the repo you already have. No server to stand up, no account to create.",
-        "command": "npm i -g synqit && synqit init",
-        "out": "→ linked to",
-        "dim": " julianshekhtmeyster/synqit-hack"
+        "blurb": "Clone and link it. No server to stand up, no account to create. configure checks your API key against the real API before saving it.",
+        "command": "./install.sh && synqit configure",
+        "out": "→ key verified,",
+        "dim": " saved git-ignored"
     },
     {
         "id": "push",
         "label": "Push",
-        "blurb": "Describe what you meant to do. The agent folds it into the newest main and syncs your checkout back.",
+        "blurb": "Describe what you want to be true. The agent integrates it into the newest main and leaves your workspace on that commit.",
         "command": "synqit push \"add avatars\"",
-        "out": "→ integrated onto main",
-        "dim": "  a91f3c2"
+        "out": "→ published to main",
+        "dim": "  15b389e"
     },
     {
-        "id": "resolve",
-        "label": "Resolve",
-        "blurb": "A genuine product decision stops the agent and asks you in the notch. You never see a merge marker.",
-        "command": "synqit status",
-        "out": "→ needs_human",
-        "dim": "  free tier vs. unlimited"
+        "id": "preview",
+        "label": "Preview",
+        "blurb": "See which files a push would read before it writes anything: the ones you touched, plus everything reachable from them.",
+        "command": "synqit push --dry-run \"add avatars\"",
+        "out": "→ 11 files in context,",
+        "dim": " nothing committed"
     }
 ];
 

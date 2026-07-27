@@ -5,7 +5,6 @@ import from "lenis" { default as Lenis }
 import from "@jac/runtime" { Link }
 import from ".Logo" { Logo }
 import from ".HeroPanel" { HeroPanel }
-import from ".NotchMock" { NotchMock }
 import from ".TerminalWindow" { TerminalWindow }
 import from ".LandingUI" { Eyebrow, SectionHead, CardGrid, FeatureCard, FaqItem, DetailSection }
 
@@ -14,7 +13,7 @@ import from ".LandingUI" { Eyebrow, SectionHead, CardGrid, FeatureCard, FaqItem,
 The dashboard lives at "/app"; this is what a first-time visitor lands on.
 """
 
-glob REPO: str = "https://github.com/julianshekhtmeyster/synqit-hack";
+glob REPO: str = "https://github.com/philipnisevich/synqit";
 
 glob NAV_LINKS: list[dict[str, str]] = [
     {"href": "#how-it-works", "label": "How it works"},
@@ -23,78 +22,82 @@ glob NAV_LINKS: list[dict[str, str]] = [
 ];
 
 glob FEATURES: list[dict[str, str]] = [
-    {"title": "No branches", "body": "One shared main. Nothing to fork, nothing to open a pull request against."},
-    {"title": "Human escalation", "body": "A genuine product decision stops the agent and asks, instead of guessing and shipping the wrong call."},
-    {"title": "Native notch", "body": "A real macOS menu-bar app. Always there, out of the way until it isn't."},
-    {"title": "Precedent memory", "body": "Once you've decided a concept, the same question isn't asked twice, even from a different file."},
-    {"title": "GitHub-backed", "body": "Real commits, on your real main. doctor verifies the token can actually write before you ever push."},
-    {"title": "Open source", "body": "MIT licensed, self-hosted. Fork it, read every line that runs your pushes."}
+    {"title": "One shared main", "body": "Everyone works against the same branch. Nothing to fork, nothing to open a pull request against."},
+    {"title": "Context from your imports", "body": "Your codebase is a graph. A push walks it outward from what you touched to reach callers, dependents, and tests."},
+    {"title": "Call sites come along", "body": "Change a function's shape and the files that use it are updated in the same commit, including the tests that asserted the old one."},
+    {"title": "Someone else pushed first", "body": "If main moves mid-integration, the push re-reads it and integrates again against the new baseline instead of failing."},
+    {"title": "Runs on your machine", "body": "No server, no account. Your API key stays local and commits are published with your own git credentials."},
+    {"title": "Real commits", "body": "Ordinary commits on your real main, authored by you, each one explaining what it changed and what it deliberately left alone."}
 ];
 
 glob OPEN_SOURCE: list[dict[str, str]] = [
-    {"title": "Self-hosted", "body": "Runs on your machine or your infrastructure. No Synqit account, ever."},
-    {"title": "MIT licensed", "body": "Fork it, read it, ship your own escalation surface on top of it."},
-    {"title": "Extensible", "body": "The EscalationSurface seam means Slack, Linear, or your own UI can plug in exactly where the notch does."}
+    {"title": "Local first", "body": "The CLI runs entirely on your machine. There is no Synqit server in the path between you and GitHub."},
+    {"title": "Nothing to trust", "body": "Read every line that touches your code. The whole pipeline is one repo you can clone."},
+    {"title": "Built on Jac", "body": "The file graph, the traversal, and the integration are Jac walkers over a real object-spatial graph."}
 ];
 
 glob ROADMAP: list[str] = [
-    "Slack surface",
-    "Windows / Linux client",
-    "VS Code extension",
+    "PyPI install",
+    "Editor integration",
     "Team activity dashboard",
-    "Multi-repo orchestration",
-    "Bring your own model"
+    "Multi-repo support",
+    "Bring your own model",
+    "Richer conflict escalation"
 ];
 
 glob STEPS: list[dict[str, str]] = [
-    {"n": "01", "t": "Push your feature", "d": "Describe the change in plain English: synqit push \"add avatars\""},
-    {"n": "02", "t": "An agent integrates it", "d": "It reads the newest main and resolves anything it can safely decide on its own."},
-    {"n": "03", "t": "You decide, only when it matters", "d": "A genuine product conflict becomes three choices, right in your notch."}
+    {"n": "01", "t": "Say what you want", "d": "synqit push \"add avatars\" - or edit the code first and let your diff guide it."},
+    {"n": "02", "t": "It scopes the context", "d": "A walker reads the newest main and traverses the import graph to everything your change reaches."},
+    {"n": "03", "t": "It publishes to main", "d": "A real commit, and your workspace is already sitting on it. Nothing to pull."}
 ];
 
 glob FAQS: list[dict[str, str]] = [
-    {"q": "How is this different from reviewing pull requests?", "a": "There's nothing to review. One shared main: the agent integrates continuously, and only stops you for a real product call, not a stylistic one."},
-    {"q": "Does this replace Git?", "a": "No. It replaces branches, pull requests, and merges on top of Git. GitHub stays the source of truth for every commit."},
-    {"q": "What happens if I don't answer in time?", "a": "The push ends in needs_human after five minutes. Your local work is never touched: you can answer later and push again."},
-    {"q": "Is my code sent to a third party?", "a": "The integration agent calls an LLM to reason about conflicts. Only the changed files and their intent are sent."},
-    {"q": "Can multiple people push at once?", "a": "Pushes are serialized per project: one queue, one integration at a time. No simultaneous integration race to corrupt main."},
-    {"q": "What if I haven't installed the notch?", "a": "A conflicting push returns needs_human immediately instead of hanging. Your work stays local and unchanged until you attach a notch."},
-    {"q": "Is Synqit open source?", "a": "Yes, MIT licensed. Fork it, self-host it, or swap the escalation surface for your own."}
+    {"q": "How is this different from reviewing pull requests?", "a": "There is no branch and nothing to review. Everyone integrates into the same main continuously, and the agent brings the surrounding call sites and tests along with each change."},
+    {"q": "Does this replace Git?", "a": "No. It replaces branches, pull requests, and merges on top of Git. GitHub stays the source of truth, and every push is an ordinary commit."},
+    {"q": "Do I push a diff or a description?", "a": "Either. With local edits, they are the proposal and the intent guides how they land. With a clean tree, the intent alone is enough."},
+    {"q": "What if someone publishes while I'm integrating?", "a": "Git rejects the push, and Synqit re-reads main and integrates again against the new baseline. Their commit stays intact and history stays linear."},
+    {"q": "Is my code sent to a third party?", "a": "The integration calls Anthropic's API with the files around your change, not the whole repo. The key is yours and stays on your machine."},
+    {"q": "How does it know which files matter?", "a": "It parses imports into a graph and walks outward from the files you touched, two hops by default. Use --dry-run to see exactly what it would look at."},
+    {"q": "What if it gets it wrong?", "a": "It is a normal commit, so git revert works. Your pre-push state is also snapshotted, and any failure prints the command to restore it."}
 ];
 
-glob QUEUE_ROWS: list[dict[str, str]] = [
-    {"dev": "dev_ben", "pct": "62%", "left": "3:07", "expired": ""},
-    {"dev": "dev_ana", "pct": "100%", "left": "expired", "expired": "yes"},
-    {"dev": "dev_theo", "pct": "18%", "left": "0:54", "expired": ""}
+glob CONTEXT_ROWS: list[dict[str, str]] = [
+    {"path": "src/lib/validate.js", "hop": "touched"},
+    {"path": "src/models/user.js", "hop": "touched"},
+    {"path": "src/models/order.js", "hop": "1 hop"},
+    {"path": "tests/validate.test.js", "hop": "1 hop"},
+    {"path": "src/services/userService.js", "hop": "2 hops"}
 ];
 
 glob AUDIT_ROWS: list[dict[str, str]] = [
-    {"sha": "a91f3c2", "decision": "kept theirs", "dev": "dev_ana"},
-    {"sha": "7c2e0d1", "decision": "mechanical", "dev": "-"},
-    {"sha": "e58b420", "decision": "instructed", "dev": "dev_ben"}
+    {"sha": "15b389e", "decision": "migrated validation + tests", "dev": "4 files"},
+    {"sha": "fd471ec", "decision": "added route + wired call sites", "dev": "3 files"},
+    {"sha": "cabcebb", "decision": "new rule, tests updated", "dev": "2 files"}
 ];
 
-glob PROJECTS: list[str] = ["pricing-service", "marketing-site", "mobile-app"];
-
 glob CLONE_LINES: list[dict[str, any]] = [
-    {"prompt": True, "text": "git clone https://github.com/julianshekhtmeyster/synqit-hack.git", "dim": ""},
-    {"prompt": True, "text": "cd synqit-hack && make server", "dim": ""}
+    {"prompt": True, "text": "git clone https://github.com/philipnisevich/synqit.git", "dim": ""},
+    {"prompt": True, "text": "cd synqit && ./install.sh", "dim": ""},
+    {"prompt": True, "text": "cd ~/your-repo && synqit configure", "dim": ""}
 ];
 
 glob STATUS_LINES: list[dict[str, any]] = [
     {"prompt": True, "text": "synqit status", "dim": ""},
-    {"prompt": False, "text": "Synqit project: pricing-service", "dim": ""},
-    {"prompt": False, "text": "  server: http://127.0.0.1:8899", "dim": ""},
-    {"prompt": False, "text": "  local changes ready to push: 2", "dim": ""},
-    {"prompt": False, "text": "  you: dev_ben", "dim": ""},
-    {"prompt": False, "text": "  notch: attached", "dim": ""},
-    {"prompt": False, "text": "  shared GitHub commit: a91f3c2", "dim": " (up to date)"}
+    {"prompt": False, "text": "philipnisevich/synqit-lab", "dim": "   shared branch: main"},
+    {"prompt": False, "text": "  main is at 19fe09b", "dim": " (18 text files)"},
+    {"prompt": False, "text": "  2 local change(s) a push would use as its proposal:", "dim": ""},
+    {"prompt": False, "text": "    modified src/lib/validate.js", "dim": ""},
+    {"prompt": False, "text": "    modified src/models/user.js", "dim": ""}
 ];
 
 glob DOCTOR_LINES: list[dict[str, any]] = [
-    {"prompt": False, "text": "✓ GitHub token configured", "dim": ""},
-    {"prompt": False, "text": "✓ OpenRouter API key configured", "dim": ""},
-    {"prompt": False, "text": "✓ Contents verified on acme/pricing-service", "dim": " at a91f3c2"}
+    {"prompt": True, "text": "synqit doctor", "dim": ""},
+    {"prompt": False, "text": "  [ok] git", "dim": "                 git version 2.52.0"},
+    {"prompt": False, "text": "  [ok] repository root", "dim": "     ~/synqit-lab"},
+    {"prompt": False, "text": "  [ok] on main", "dim": "             currently main"},
+    {"prompt": False, "text": "  [ok] can fetch main", "dim": "      19fe09b"},
+    {"prompt": False, "text": "  [ok] ANTHROPIC_API_KEY", "dim": "   from .env"},
+    {"prompt": False, "text": "  [ok] ready to push", "dim": ""}
 ];
 
 def:pub Landing() -> JsxElement {
@@ -198,15 +201,15 @@ def:pub Landing() -> JsxElement {
                 <div className="mx-auto grid w-full max-w-6xl items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-16">
                     <div>
                         <h1 className="font-display text-5xl leading-[1.08] sm:text-[58px]">
-                            {"One shared "}
-                            <span className="text-brand italic">main</span>
-                            {", no branches "}
-                            <span className="text-brand italic">to review.</span>
+                            {"A new way to "}
+                            <span className="text-brand italic">work together</span>
+                            {" on one shared "}
+                            <span className="text-brand italic">main.</span>
                         </h1>
                         <p className="mt-6 max-w-lg text-[17px] leading-relaxed text-ink/70">
-                            Push a feature. An agent integrates it into the newest main. When it hits a
-                            decision only you can make, not a merge conflict but a product one, it asks.
-                            Right in your notch.
+                            Push a feature intent, or the code you already wrote. An agent integrates it
+                            into the newest main, reading the files around your change so call sites and
+                            tests come along with it.
                         </p>
                         <div className="mt-8 flex flex-wrap items-center gap-3">
                             <a href="#quickstart" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:opacity-90">
@@ -223,11 +226,6 @@ def:pub Landing() -> JsxElement {
                     </div>
                 </div>
             </div>
-        </section>
-
-        {#* ---------- The escalation itself ---------- *#}
-        <section className="px-6 py-24">
-            <NotchMock />
         </section>
 
         {#* ---------- How it works ---------- *#}
@@ -262,7 +260,7 @@ def:pub Landing() -> JsxElement {
         {#* ---------- Features ---------- *#}
         <section id="features" data-reveal className="py-20">
             <div className="mx-auto max-w-6xl px-6">
-                <SectionHead eyebrow="Features" sub="Everything shared source control needs to not be Git plus a chatbot.">
+                <SectionHead eyebrow="Features" sub="Continuous integration into main, with the context to do it correctly.">
                     Built for one shared main.
                 </SectionHead>
                 <div className="mt-10">
@@ -278,43 +276,37 @@ def:pub Landing() -> JsxElement {
         {#* ---------- Detail sections ---------- *#}
         <DetailSection
             eyebrow="Bring your own repo"
-            heading="Any GitHub repo, one fine-grained token."
+            heading="Any git repo, nothing to stand up."
             visual={<TerminalWindow lines={DOCTOR_LINES} />}
         >
             <p>
-                Point Synqit at a repo with Contents: read and write. doctor --verify exercises the
-                permission for real, against a real ref, not an identity check that passes for any
-                token and then fails on your first push.
+                Point Synqit at a repo with an origin remote and run doctor. It checks git, your
+                branch, whether it can actually reach main, and where your API key came from, then
+                names the exact command for anything that would block a push.
             </p>
         </DetailSection>
 
         <DetailSection
-            eyebrow="Timeout safety"
-            heading="Escalations that don't hang your team."
+            eyebrow="Scoped context"
+            heading="It reads what your change touches."
             band={True}
             reverse={True}
             visual={
                 <div className="space-y-3 rounded-xl border border-rule bg-white p-6 font-mono text-sm">
-                    {for r in QUEUE_ROWS {
-                        <div key={r["dev"]} className="flex items-center gap-3">
-                            <span className="w-20 shrink-0 text-ink-soft">{r["dev"]}</span>
-                            <div className="h-1.5 flex-1 rounded-full bg-paper-2">
-                                <div
-                                    className="h-1.5 rounded-full"
-                                    style={{"width": r["pct"], "background": "var(--danger)" if r["expired"] else "var(--brand)"}}
-                                />
-                            </div>
-                            <span className="w-16 text-right text-ink-soft">{r["left"]}</span>
+                    {for r in CONTEXT_ROWS {
+                        <div key={r["path"]} className="flex items-center gap-3">
+                            <span className="min-w-0 flex-1 truncate text-ink">{r["path"]}</span>
+                            <span className="shrink-0 text-ink-soft">{r["hop"]}</span>
                         </div>
                     }}
                 </div>
             }
         >
             <ul className="space-y-2">
-                <li>A question waits five minutes, not forever.</li>
-                <li>No answer? The push ends in needs_human, your local work untouched.</li>
-                <li>Every fallback is today's behavior: no notch, a timeout, too many rounds.</li>
-                <li>One slow decision never wedges the rest of the queue.</li>
+                <li>Imports are parsed into a graph of files.</li>
+                <li>A walker starts at what you touched and moves outward, two hops by default.</li>
+                <li>Callers and dependents both count: the test that asserts your old behavior is reachable from it.</li>
+                <li>Run with --dry-run to see the exact set before anything is written.</li>
             </ul>
         </DetailSection>
 
@@ -327,8 +319,8 @@ def:pub Landing() -> JsxElement {
                         <thead>
                             <tr className="border-b border-rule text-xs text-ink-soft uppercase">
                                 <th className="px-4 py-3 font-normal">Commit</th>
-                                <th className="px-4 py-3 font-normal">Decision</th>
-                                <th className="px-4 py-3 font-normal">Dev</th>
+                                <th className="px-4 py-3 font-normal">What it did</th>
+                                <th className="px-4 py-3 font-normal">Scope</th>
                             </tr>
                         </thead>
                         <tbody className="font-mono text-[13px] [font-variant-numeric:tabular-nums]">
@@ -345,32 +337,8 @@ def:pub Landing() -> JsxElement {
             }
         >
             <p>
-                Which decision was made, and why, is part of the published commit message, not a
-                side channel that drifts from what actually shipped.
-            </p>
-        </DetailSection>
-
-        <DetailSection
-            eyebrow="Multi-project"
-            heading="One shared queue, however many repos."
-            reverse={True}
-            visual={
-                <div className="grid grid-cols-2 gap-3">
-                    {for p in PROJECTS {
-                        <div key={p} className="rounded-lg border border-rule bg-white p-4">
-                            <p className="text-sm font-medium text-ink">{p}</p>
-                            <p className="mt-1 font-mono text-xs text-ok">active</p>
-                        </div>
-                    }}
-                    <div className="flex items-center justify-center rounded-lg border border-dashed border-rule p-4 text-sm text-ink-soft">
-                        + Add project
-                    </div>
-                </div>
-            }
-        >
-            <p>
-                One person runs one server. Every project your team connects shares the same
-                notch, the same identity, the same escalation surface.
+                What changed, and what was deliberately left alone, is written into the commit
+                message itself, not a side channel that drifts from what actually shipped.
             </p>
         </DetailSection>
 
@@ -378,7 +346,7 @@ def:pub Landing() -> JsxElement {
         <section data-reveal className="py-20">
             <div className="mx-auto max-w-6xl px-6">
                 <SectionHead eyebrow="Open source" sub="Read every line that runs your pushes, then change the ones you don't like.">
-                    Extensible, adaptable, open source.
+                    Local, inspectable, open source.
                 </SectionHead>
                 <div className="mt-10">
                     <CardGrid>
@@ -394,7 +362,7 @@ def:pub Landing() -> JsxElement {
         <section data-reveal className="py-20">
             <div className="mx-auto max-w-6xl px-6">
                 <Eyebrow>Roadmap</Eyebrow>
-                <h2 className="mt-4 font-display text-4xl">Where a surface could plug in next.</h2>
+                <h2 className="mt-4 font-display text-4xl">What comes next.</h2>
                 <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {for r in ROADMAP {
                         <div key={r} className="flex items-center justify-between rounded-xl border border-dashed border-rule p-5 text-ink-soft">
@@ -408,7 +376,7 @@ def:pub Landing() -> JsxElement {
                         href={REPO}
                         className="flex items-center justify-center rounded-xl border border-rule p-5 text-sm font-medium text-ink hover:border-brand/50"
                     >
-                        Suggest a surface
+                        Suggest something
                     </a>
                 </div>
             </div>
@@ -432,15 +400,15 @@ def:pub Landing() -> JsxElement {
             <div className="mx-auto max-w-2xl px-6">
                 <Eyebrow>Get started</Eyebrow>
                 <h2 className="mt-4 font-display text-4xl sm:text-5xl">
-                    From clone to shared main in one command.
+                    From clone to shared main in three commands.
                 </h2>
                 {#* max-w-xl, not md: the clone URL needs the room to sit on one line. *#}
                 <div className="mx-auto mt-8 max-w-xl text-left">
                     <TerminalWindow lines={CLONE_LINES} />
                 </div>
                 <p className="mx-auto mt-6 max-w-md text-sm text-ink-soft">
-                    Open source. Self-hosted. First run walks you through setup, no Synqit account
-                    required.
+                    Runs entirely on your machine. configure verifies your API key before saving it,
+                    and doctor tells you if anything else would block a push.
                 </p>
                 <div className="mt-6 flex items-center justify-center gap-3">
                     <a
@@ -465,7 +433,7 @@ def:pub Landing() -> JsxElement {
                     <div>
                         <Logo height={18} className="text-ink" />
                         <p className="mt-3 max-w-[22ch] text-sm text-ink-soft">
-                            A conflict becomes a question, not a rejected push.
+                            Integration into one shared main, with the context to get it right.
                         </p>
                     </div>
                     <div>
@@ -479,8 +447,8 @@ def:pub Landing() -> JsxElement {
                         <p className="font-mono text-xs tracking-wide text-ink-soft uppercase">Platform</p>
                         <ul className="mt-3 space-y-2 text-sm">
                             <li><Link to="/app" className="hover:text-ink">Dashboard</Link></li>
-                            <li><a href="#features" className="hover:text-ink">Notch</a></li>
-                            <li><a href="#features" className="hover:text-ink">Precedent memory</a></li>
+                            <li><a href="#features" className="hover:text-ink">Features</a></li>
+                            <li><a href="#how-it-works" className="hover:text-ink">How it works</a></li>
                         </ul>
                     </div>
                     <div>
@@ -492,7 +460,7 @@ def:pub Landing() -> JsxElement {
                     </div>
                 </div>
                 <div className="mt-12 flex flex-col-reverse items-center justify-between gap-4 border-t border-rule pt-6 text-xs text-ink-soft sm:flex-row">
-                    <span>© 2026 synqit. Open source under MIT.</span>
+                    <span>© 2026 synqit. Open source.</span>
                 </div>
             </div>
         </footer>
