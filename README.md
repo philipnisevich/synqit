@@ -37,13 +37,22 @@ Two consequences worth stating plainly:
 ## Quickstart
 
 ```bash
-ln -s "$(pwd)/bin/synqit" /usr/local/bin/synqit   # or anywhere on your PATH
+git clone https://github.com/philipnisevich/synqit.git
+cd synqit && ./install.sh          # symlinks `synqit` onto your PATH
 export ANTHROPIC_API_KEY=sk-ant-...
 
-cd ~/code/your-project        # any git repo with an 'origin' remote
-synqit status                 # what a push would consider
+cd ~/code/your-project             # any git repo with an 'origin' remote
+synqit doctor                      # check everything a push needs
+synqit push --dry-run "Add password validation"
 synqit push "Add password validation"
 ```
+
+`install.sh` links rather than copies, so `git pull` updates the command. It
+also warns if another `synqit` earlier on your PATH would shadow it.
+
+**Start with `synqit doctor`.** It checks git, the repository root, the remote,
+your branch, fetch access, and the API key — and prints the exact command to fix
+anything that would block a push.
 
 `synqit push` works from intent alone. If you also have local edits, those are
 used as the proposal — a strong hint for what to implement, not a literal patch.
@@ -52,8 +61,24 @@ used as the proposal — a strong hint for what to implement, not a literal patc
 |---|---|
 | `synqit push "<intent>"` | Make the intent true on the shared branch |
 | `synqit status` | How this workspace differs from it |
+| `synqit doctor` | Check everything a push needs |
+| `--dry-run` | Show the context and proposal, change nothing |
 | `--branch <name>` | Shared branch (default: `main`) |
 | `--hops <n>` | Dependency hops of context (default: `2`) |
+
+### Where your API key comes from
+
+Precedence is explicit, and `synqit doctor` always tells you which applied:
+
+1. `ANTHROPIC_API_KEY` exported in your environment
+2. a `.env` in the repository you are running against
+3. otherwise byLLM may discover one elsewhere on the machine — this works, but
+   Synqit warns, because it may not be the account you meant to bill
+
+This matters more than it looks. Constructing byLLM's `Model` writes the key
+into the environment at *import* time, so any check written after that import
+passes unconditionally. `cli/env_guard.jac` is imported first, before the
+integration, specifically so it observes the environment as you left it.
 
 Your workspace is left at the published commit, so there is no separate pull
 step. If anything fails after the working tree is touched, your original edits
