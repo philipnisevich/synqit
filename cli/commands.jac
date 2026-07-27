@@ -13,23 +13,40 @@ the hosted dashboard shares, which is exactly how the two would drift.
 import os;
 import sys;
 
+import from env_guard { key_source, has_accountable_key, REPO_ENV_PATH }
 import from pipeline { run_push, preflight, proposed_changes, PushOutcome }
 import from integrations.local_repo {
     at_repo_root, current_branch, derive_owner_repo, fetch_branch, has_remote,
-    snapshot_at_ref, snapshot_worktree,
+    repo_root, run_git, snapshot_at_ref, snapshot_worktree,
 }
-import from ui { bold, gray, green, step, ok, info, fail }
+import from ui { bold, gray, green, red, step, ok, info, fail }
 
 glob DEFAULT_BRANCH: str = "main";
 
-"""byLLM reads the key at call time, not import time, so without this check a
-missing key surfaces as a stack trace from inside the integration instead of a
-one-line CLI error."""
+"""The key check, phrased around where the key came from rather than merely
+whether one exists - see cli/env_guard.jac for why 'exists' is not a question
+that can be answered honestly after byLLM has been imported."""
 def missing_api_key -> str {
-    if not os.environ.get("ANTHROPIC_API_KEY") {
+    source: str = key_source();
+    if source == "none" {
         return (
-            "ANTHROPIC_API_KEY is not set. Synqit runs the integration on your "
-            + "machine, so the key stays with you: export ANTHROPIC_API_KEY=sk-ant-..."
+            "No ANTHROPIC_API_KEY. Synqit runs the integration on your machine, "
+            + "so the key stays with you:\n"
+            + "      export ANTHROPIC_API_KEY=sk-ant-...\n"
+            + "    or put it in a .env file in this repository."
+        );
+    }
+    return "";
+}
+
+"""An 'external' key works but was found by byLLM in a file we did not choose,
+which may not be the account the developer means to bill. Worth one line of
+output, not a refusal."""
+def key_warning -> str {
+    if key_source() == "external" {
+        return (
+            "Using an ANTHROPIC_API_KEY discovered outside this repository. "
+            + "Export one explicitly if that is not the account you meant."
         );
     }
     return "";
@@ -50,6 +67,26 @@ names an explicit next step - a failed push should never leave someone guessing
 what to do, least of all about work that is recoverable but not obvious."""
 def report(outcome: PushOutcome, branch: str) -> int {
     status: str = outcome.status;
+
+    for warning in outcome.warnings {
+        info(gray("  !  " + warning));
+    }
+
+    if status == "dry_run" {
+        ok("dry run complete - nothing was committed");
+        info(gray("    " + str(len(outcome.context_files)) + " file(s) would be the integration's workspace:"));
+        for path in outcome.context_files {
+            info("      " + path);
+        }
+        if outcome.files_touched {
+            info(gray("    your local edits used as the proposal:"));
+            for path in outcome.files_touched {
+                info("      " + path);
+            }
+        }
+        info(gray("    Re-run without --dry-run to integrate and publish."));
+        return 0;
+    }
 
     if status == "published" {
         ok("published to " + branch + " at " + outcome.head[:7]);
@@ -111,10 +148,17 @@ def parse_hops(hops_flag: str | None) -> int {
     return value;
 }
 
-def cmd_push(args: list[str], branch_flag: str | None, hops_flag: str | None) {
+"""Live phase reporting. An integration can take the better part of a minute
+and a retry doubles it, so silence reads as a hang."""
+def show_progress(phase: str, detail: str) {
+    step(gray(phase.ljust(12)) + detail);
+}
+
+def cmd_push(args: list[str], branch_flag: str | None, hops_flag: str | None, dry_run: bool) {
     intent: str = " ".join([a for a in args if a]).strip();
     if not intent {
         fail("Describe what you want to be true, e.g. synqit push \"Add password validation\".");
+        info(gray("    Run `synqit doctor` if you are not sure this repo is set up."));
         sys.exit(1);
     }
 
@@ -133,8 +177,23 @@ def cmd_push(args: list[str], branch_flag: str | None, hops_flag: str | None) {
         sys.exit(1);
     }
 
-    step("integrating against " + branch + " - this runs an LLM and may take a moment");
-    outcome = run_push(intent=intent, branch=branch, submitter="", max_hops=max_hops);
+    warning: str = key_warning();
+    if warning {
+        info(gray("  !  " + warning));
+    }
+
+    if dry_run {
+        info(gray("  -- dry run: nothing will be committed or pushed --"));
+    }
+
+    outcome = run_push(
+        intent=intent,
+        branch=branch,
+        submitter="",
+        max_hops=max_hops,
+        dry_run=dry_run,
+        progress=show_progress,
+    );
     sys.exit(report(outcome, branch));
 }
 
@@ -197,6 +256,99 @@ def cmd_status(branch_flag: str | None) {
     sys.exit(0);
 }
 
+def check_line(label: str, passed: bool, detail: str) -> bool {
+    marker: str = green("  [ok] ") if passed else red("  [x]  ");
+    info(marker + label.ljust(22) + gray(detail));
+    return passed;
+}
+
+"""Diagnose every prerequisite at once, so a failure is found here rather than
+halfway through an integration. Exits non-zero if anything would block a push,
+which also makes it usable as a setup check in CI or a install script."""
+def cmd_doctor(branch_flag: str | None) {
+    branch: str = branch_flag or DEFAULT_BRANCH;
+    info("");
+    info(bold("  synqit doctor"));
+    info("");
+
+    blocking: list[str] = [];
+
+    git_probe = run_git(["--version"]);
+    if not check_line("git", git_probe["code"] == 0, (git_probe["out"] as str).strip() or "not found") {
+        blocking.append("Install git.");
+    }
+
+    in_repo: bool = at_repo_root();
+    repo_detail: str = "";
+    if in_repo {
+        repo_detail = repo_root();
+    } else {
+        try {
+            repo_detail = "inside " + repo_root() + " - run from its root";
+        } except Exception {
+            repo_detail = "not a git repository";
+        }
+    }
+    if not check_line("repository root", in_repo, repo_detail) {
+        blocking.append("Run synqit from the root of the repository it manages.");
+    }
+
+    if in_repo {
+        remote_ok: bool = has_remote("origin");
+        remote_url: str = "";
+        if remote_ok {
+            remote_url = (run_git(["remote", "get-url", "origin"])["out"] as str).strip();
+        }
+        if not check_line("origin remote", remote_ok, remote_url or "missing") {
+            blocking.append("Add an 'origin' remote - Synqit publishes through it.");
+        }
+
+        on: str = current_branch();
+        if not check_line("on " + branch, on == branch, "currently " + (on or "detached HEAD")) {
+            blocking.append("git switch " + branch);
+        }
+
+        reachable: bool = True;
+        detail: str = "";
+        try {
+            detail = fetch_branch(branch)[:7];
+        } except Exception as error {
+            reachable = False;
+            detail = str(error)[:70];
+        }
+        if not check_line("can fetch " + branch, reachable, detail) {
+            blocking.append("Check network access and push permission on this remote.");
+        }
+    }
+
+    source: str = key_source();
+    key_detail: str = {
+        "environment": "from your environment",
+        "repo-dotenv": "from " + REPO_ENV_PATH,
+        "external": "found outside this repo - export one explicitly",
+        "none": "not set",
+    }.get(source, source) as str;
+    if not check_line("ANTHROPIC_API_KEY", source != "none", key_detail) {
+        blocking.append("export ANTHROPIC_API_KEY=sk-ant-...");
+    }
+
+    info("");
+    if blocking {
+        fail(str(len(blocking)) + " thing(s) to fix before `synqit push` will work:");
+        for item in blocking {
+            info(gray("      - " + item));
+        }
+        info("");
+        sys.exit(1);
+    }
+    ok("ready to push");
+    if key_source() == "external" {
+        info(gray("    " + key_warning()));
+    }
+    info("");
+    sys.exit(0);
+}
+
 def cmd_help {
     info("");
     info(bold("  synqit") + gray(" - shared source control without branches, commits, or pulls"));
@@ -204,14 +356,17 @@ def cmd_help {
     info(bold("  Usage"));
     info("    synqit push \"feature intent\"     Make the intent true on the shared branch");
     info("    synqit status                    Show how this workspace differs from it");
+    info("    synqit doctor                    Check everything a push needs");
     info("    synqit help                      Show this help");
     info("");
     info(bold("  Options"));
+    info("    --dry-run                        Show the context and proposal, change nothing");
     info("    --branch <name>                  Shared branch (default: main)");
     info("    --hops <n>                       Dependency hops of context (default: 2)");
     info("");
     info(bold("  Setup"));
     info("    export ANTHROPIC_API_KEY=sk-ant-...");
     info(gray("    Everything runs locally; publishing uses your own git credentials."));
+    info(gray("    Run `synqit doctor` first - it names anything that would block a push."));
     info("");
 }

@@ -6,10 +6,15 @@ publishing to the wrong branch is a far worse outcome than an error message.
 
 import sys;
 
-import from commands { cmd_push, cmd_status, cmd_help }
+# Imported before `commands` on purpose: env_guard must observe the environment
+# before byLLM's Model construction injects ANTHROPIC_API_KEY into it. Moving
+# this line below the next one silently breaks the key-source check.
+import from env_guard { key_source }
+import from commands { cmd_push, cmd_status, cmd_doctor, cmd_help }
 import from ui { fail }
 
 glob KNOWN_FLAGS: list[str] = ["branch", "hops"];
+glob BOOLEAN_FLAGS: list[str] = ["dry-run"];
 
 obj ParsedArgs {
     has positionals: list[str] = [];
@@ -37,17 +42,22 @@ def parse_args(argv: list[str]) -> ParsedArgs {
 
         if arg.startswith("--") {
             body: str = arg[2:];
+            if body in BOOLEAN_FLAGS {
+                result.flags[body] = "true";
+                i += 1;
+                continue;
+            }
             if "=" in body {
                 parts: list[str] = body.split("=", 1);
                 if parts[0] not in KNOWN_FLAGS {
-                    raise Exception("Unknown flag --" + parts[0]);
+                    raise Exception("Unknown flag --" + parts[0] + ". Run `synqit help`.");
                 }
                 result.flags[parts[0]] = parts[1];
                 i += 1;
                 continue;
             }
             if body not in KNOWN_FLAGS {
-                raise Exception("Unknown flag --" + body);
+                raise Exception("Unknown flag --" + body + ". Run `synqit help`.");
             }
             if i + 1 >= len(argv) {
                 raise Exception("--" + body + " needs a value");
@@ -82,9 +92,16 @@ with entry {
         if command == "help" {
             cmd_help();
         } elif command == "push" {
-            cmd_push(rest, parsed.flags.get("branch"), parsed.flags.get("hops"));
+            cmd_push(
+                rest,
+                parsed.flags.get("branch"),
+                parsed.flags.get("hops"),
+                parsed.flags.get("dry-run") == "true",
+            );
         } elif command == "status" {
             cmd_status(parsed.flags.get("branch"));
+        } elif command == "doctor" {
+            cmd_doctor(parsed.flags.get("branch"));
         } else {
             fail("Unknown command '" + command + "'. Run `synqit help`.");
             sys.exit(1);
