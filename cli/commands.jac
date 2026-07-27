@@ -1,335 +1,217 @@
-import sys;
-import getpass;
+"""The `synqit` commands.
+
+Everything runs on this machine. There is no server to log into, no account to
+create, and no API key handed to anyone else - the only credentials involved are
+the developer's existing git access and an ANTHROPIC_API_KEY that never leaves
+their environment.
+
+Each command is a thin shell over cli.pipeline: validate, call, render. Putting
+decisions here rather than in the pipeline would place logic outside the part
+the hosted dashboard shares, which is exactly how the two would drift.
+"""
+
 import os;
+import sys;
 
-import from config { load_config, save_config }
-import from api { register, login as api_login, call_walker }
-import from git_ops { derive_owner_repo, is_git_root, current_branch, head_sha, working_tree_changes, fetch_branch, sync_to_commit }
-import from workspace { changed_files, hashes_for, load_state, read_tracked_workspace, save_state }
-import from server_env { verify_github_token, verify_anthropic_key, write_env_file }
-import from ui { bold, cyan, gray, step, ok, info, fail }
+import from pipeline { run_push, preflight, proposed_changes, PushOutcome }
+import from integrations.local_repo {
+    at_repo_root, current_branch, derive_owner_repo, fetch_branch, has_remote,
+    snapshot_at_ref, snapshot_worktree,
+}
+import from ui { bold, gray, green, step, ok, info, fail }
 
-glob DEFAULT_BASE: str = "http://localhost:8000";
+glob DEFAULT_BRANCH: str = "main";
 
-def require_session -> dict {
-    cfg = load_config();
-    if not cfg.get("token") or not cfg.get("base") {
-        raise Exception("Not logged in. Run `synqit login --base <server-url>` first.");
+"""byLLM reads the key at call time, not import time, so without this check a
+missing key surfaces as a stack trace from inside the integration instead of a
+one-line CLI error."""
+def missing_api_key -> str {
+    if not os.environ.get("ANTHROPIC_API_KEY") {
+        return (
+            "ANTHROPIC_API_KEY is not set. Synqit runs the integration on your "
+            + "machine, so the key stays with you: export ANTHROPIC_API_KEY=sk-ant-..."
+        );
     }
-    return cfg;
+    return "";
 }
 
-def prompt(label: str) -> str {
-    out: any = sys.stdout;
-    out.write(label);
-    out.flush();
-    stdin_stream: any = sys.stdin;
-    line: str = stdin_stream.readline() as str;
-    return line.strip();
-}
-
-def normalize_base(value: str) -> str {
-    return value.rstrip("/");
-}
-
-def cmd_login(base_flag: str | None, username_flag: str | None, password_flag: str | None) {
-    cfg = load_config();
-    base_raw: str = (base_flag or cfg.get("base") or DEFAULT_BASE) as str;
-    base: str = normalize_base(base_raw);
-
-    username: str = username_flag as str if username_flag else "";
-    password: str = password_flag as str if password_flag else "";
-
-    if not username or not password {
-        stream: any = sys.stdout;
-        if not stream.isatty() {
-            fail("`synqit login` must run in an interactive terminal, or pass --username/--password.");
-            return;
-        }
-        if not username {
-            username = prompt("Username: ");
-        }
-        if not password {
-            password = getpass.getpass("Password: ");
-        }
-    }
-
-    if not username or not password {
-        fail("Username and password are required.");
+def render_paths(label: str, paths: list[str]) {
+    if not paths {
         return;
     }
-
-    step("Connecting to " + base);
-    session: dict = {};
-    try {
-        session = api_login(base, username, password);
-        ok("logged in as " + (session["username"] as str));
-    } except Exception as login_error {
-        step("No existing account matched - creating one");
-        try {
-            session = register(base, username, password);
-            ok("account created and logged in as " + (session["username"] as str));
-        } except Exception as register_error {
-            fail("Login failed (" + str(login_error) + "). Tried creating an account too, that also failed: " + str(register_error));
-            return;
-        }
+    info(gray("    " + label));
+    for path in paths {
+        info("      " + path);
     }
-    save_config({"base": base, "token": session["token"], "username": session["username"]});
-    info(gray("    Credentials saved. Run `synqit init` from a project's repo root next."));
 }
 
-"""Sets up the SERVER's credentials (GITHUB_TOKEN, ANTHROPIC_API_KEY) - not
-this CLI's login. Run from wherever you'll run `jac start` (normally the
-repo root) since that's where the .env it writes needs to live.
-Verifies both credentials against their real providers BEFORE saving
-anything - a bad token never gets written, so the server can never start
-believing it has working credentials when it doesn't."""
-def cmd_configure(jac_dir_flag: str | None, github_token_flag: str | None, anthropic_key_flag: str | None) {
-    jac_dir: str = jac_dir_flag or os.getcwd();
-    env_path: str = os.path.join(jac_dir, ".env");
+"""Turn a PushOutcome into output plus an exit code. Every non-published status
+names an explicit next step - a failed push should never leave someone guessing
+what to do, least of all about work that is recoverable but not obvious."""
+def report(outcome: PushOutcome, branch: str) -> int {
+    status: str = outcome.status;
 
-    github_token: str = github_token_flag as str if github_token_flag else "";
-    anthropic_key: str = anthropic_key_flag as str if anthropic_key_flag else "";
-
-    if not github_token or not anthropic_key {
-        stream: any = sys.stdout;
-        if not stream.isatty() {
-            fail("`synqit configure` must run in an interactive terminal, or pass --github-token/--anthropic-key.");
-            return;
+    if status == "published" {
+        ok("published to " + branch + " at " + outcome.head[:7]);
+        if outcome.summary {
+            info(gray("    " + outcome.summary));
         }
-        info("Configuring the Synqit server. Credentials will be saved to " + env_path + ".");
-        if not github_token {
-            github_token = getpass.getpass("GitHub token (fine-grained, Contents: read and write): ");
+        render_paths("changed:", outcome.files_touched);
+        render_paths("deleted:", outcome.files_deleted);
+        if outcome.attempts > 1 {
+            info(gray("    took " + str(outcome.attempts) + " attempts - " + branch + " moved while integrating"));
         }
-        if not anthropic_key {
-            anthropic_key = getpass.getpass("Anthropic API key: ");
-        }
+        info(gray("    This workspace is already at that commit."));
+        return 0;
     }
 
-    if not github_token or not anthropic_key {
-        fail("Both a GitHub token and an Anthropic API key are required. Nothing was saved.");
-        return;
+    if status == "needs_human" {
+        fail("This intent conflicts with what the codebase already does.");
+        if outcome.message {
+            info(gray("    " + outcome.message));
+        }
+        info(gray("    Nothing was committed. Adjust the intent and try again."));
+        return 2;
     }
 
-    step("Verifying GitHub token...");
+    if status == "integration_incomplete" {
+        fail("The integration left broken references behind, so nothing was published.");
+        if outcome.message {
+            info(gray("    " + outcome.message));
+        }
+        info(gray("    Try a smaller, more specific intent."));
+        return 2;
+    }
+
+    if status == "no_changes" {
+        fail(outcome.message or "Nothing to publish.");
+        return 1;
+    }
+
+    fail(outcome.message or "Push failed.");
+    if outcome.recovery_sha {
+        info(gray("    Your original edits were saved before this ran. Restore them with:"));
+        info(gray("      git stash apply " + outcome.recovery_sha));
+    }
+    return 1;
+}
+
+def parse_hops(hops_flag: str | None) -> int {
+    if not hops_flag {
+        return 2;
+    }
     try {
-        github_user: str = verify_github_token(github_token);
-        ok("GitHub token verified for " + github_user);
+        value: int = int(hops_flag);
+    } except ValueError {
+        raise Exception("--hops must be a whole number.");
+    }
+    if value < 0 {
+        raise Exception("--hops cannot be negative.");
+    }
+    return value;
+}
+
+def cmd_push(args: list[str], branch_flag: str | None, hops_flag: str | None) {
+    intent: str = " ".join([a for a in args if a]).strip();
+    if not intent {
+        fail("Describe what you want to be true, e.g. synqit push \"Add password validation\".");
+        sys.exit(1);
+    }
+
+    blocked: str = missing_api_key();
+    if blocked {
+        fail(blocked);
+        sys.exit(1);
+    }
+
+    branch: str = branch_flag or DEFAULT_BRANCH;
+    max_hops: int = 2;
+    try {
+        max_hops = parse_hops(hops_flag);
     } except Exception as error {
-        fail("GitHub token verification failed: " + str(error));
-        info(gray("    Nothing was saved. Fix the token and run `synqit configure` again."));
-        return;
+        fail(str(error));
+        sys.exit(1);
     }
 
-    step("Verifying Anthropic API key...");
-    try {
-        verify_anthropic_key(anthropic_key);
-        ok("Anthropic API key verified");
-    } except Exception as error {
-        fail("Anthropic API key verification failed: " + str(error));
-        info(gray("    Nothing was saved. Fix the key and run `synqit configure` again."));
-        return;
-    }
-
-    write_env_file(env_path, {"GITHUB_TOKEN": github_token, "ANTHROPIC_API_KEY": anthropic_key});
-    ok("saved verified credentials to " + env_path);
-    info(gray("    Start the server with: cd " + jac_dir + " && jac start main.jac"));
+    step("integrating against " + branch + " - this runs an LLM and may take a moment");
+    outcome = run_push(intent=intent, branch=branch, submitter="", max_hops=max_hops);
+    sys.exit(report(outcome, branch));
 }
 
-def cmd_init(project_arg: str | None, branch_flag: str | None, github_flag: str | None) {
-    cfg = require_session();
-    if load_state() is not None {
-        fail("This folder is already connected. Run `synqit status` or `synqit repair` instead.");
-        return;
-    }
-    if not is_git_root() {
-        fail("Run `synqit init` from the root of a cloned GitHub repository.");
-        return;
-    }
-    branch: str = branch_flag or "main";
-    changes = working_tree_changes();
-    if changes {
-        fail("This workspace has " + str(len(changes)) + " local change(s). Start from a fresh clone, then run init again.");
-        return;
-    }
-    branch_now: str = current_branch();
-    if branch_now != branch {
-        fail("You are on " + (branch_now or "no branch") + ", but Synqit requires " + branch + ". Run `git switch " + branch + "` and try again.");
-        return;
-    }
-    remote_sha: str = "";
-    try {
-        remote_sha = fetch_branch(branch);
-    } except Exception {
-        fail("Could not fetch origin/" + branch + ". Check your GitHub remote and internet connection.");
-        return;
-    }
-    if head_sha() != remote_sha {
-        fail("This clone is behind GitHub " + branch + ". Run `git pull --ff-only origin " + branch + "`, then retry.");
-        return;
+"""Read-only view of exactly what a push would consider: how this workspace
+differs from the shared branch, and anything that would block publishing."""
+def cmd_status(branch_flag: str | None) {
+    branch: str = branch_flag or DEFAULT_BRANCH;
+
+    if not at_repo_root() {
+        fail("Run this from the root of a git repository.");
+        sys.exit(1);
     }
 
     owner_repo: tuple[str, str] = derive_owner_repo();
-    owner: str = owner_repo[0];
-    repo: str = owner_repo[1];
-    repository: str = github_flag or (owner + "/" + repo);
-    project: str = project_arg or repository.replace("/", "-");
+    info(bold("  " + owner_repo[0] + "/" + owner_repo[1]) + gray("   shared branch: " + branch));
 
-    step("Connecting " + project + " (" + repository + ") on " + (cfg["base"] as str));
+    if not has_remote("origin") {
+        fail("No 'origin' remote - Synqit publishes through it.");
+        sys.exit(1);
+    }
+
+    head: str = "";
     try {
-        created: dict = call_walker(cfg["base"] as str, cfg["token"] as str, "create_project", {
-            "name": project, "repository": repository, "branch": branch,
-        }, 30) as dict;
-        if created.get("status") == "created" {
-            ok("created project " + project);
-        } else {
-            info(gray("    project " + project + " already exists - joining it"));
-        }
-
-        step("Seeding project graph from GitHub...");
-        call_walker(cfg["base"] as str, cfg["token"] as str, "seed_project", {
-            "project": project, "owner": owner, "repo": repo, "branch": branch,
-        }, 120);
-
-        status: dict = call_walker(cfg["base"] as str, cfg["token"] as str, "get_project", {"name": project}, 30) as dict;
-        head: str = status["head"] as str;
-        save_state({
-            "project": project, "base": cfg["base"], "branch": branch,
-            "baseSha": head, "fileHashes": hashes_for(read_tracked_workspace()),
-        });
-        ok("initialized " + project + " at " + head[:7]);
+        head = fetch_branch(branch);
     } except Exception as error {
         fail(str(error));
-    }
-}
-
-def cmd_push(intent_parts: list[str]) {
-    cfg = require_session();
-    intent: str = " ".join(intent_parts).strip();
-    if not intent {
-        fail("Describe the feature: synqit push \"Add password validation\"");
-        return;
-    }
-    state = load_state();
-    if state is None {
-        fail("This folder is not connected. Run `synqit init` first.");
-        return;
+        sys.exit(1);
     }
 
-    snapshot = read_tracked_workspace();
-    changes = changed_files(snapshot, state["fileHashes"] as dict);
+    on: str = current_branch();
+    if on != branch {
+        info(gray("    on " + (on or "detached HEAD") + " - Synqit publishes to " + branch));
+    }
+
+    baseline: dict[str, str] = snapshot_at_ref(head);
+    worktree: dict[str, str] = snapshot_worktree();
+    changes = proposed_changes(baseline, worktree);
+
+    info(gray("    " + branch + " is at " + head[:7] + " (" + str(len(baseline)) + " text files)"));
+
     if not changes {
-        info(gray("Nothing to push - this workspace is already synced."));
-        return;
-    }
-
-    info(bold("synqit: pushing feature -> " + (state["project"] as str)));
-    info(gray("    \"" + intent + "\""));
-    base_sha: str = state["baseSha"] as str;
-    info(gray("    " + str(len(changes)) + " changed file(s) from " + base_sha[:7]));
-
-    step("Integrating and publishing (this calls an LLM, can take a minute)...");
-    try {
-        result: dict = call_walker(cfg["base"] as str, cfg["token"] as str, "push", {
-            "project": state["project"], "intent": intent, "base_sha": base_sha,
-            "changes": changes, "submitter": cfg["username"],
-        }, 300) as dict;
-
-        status: str = result.get("status", "") as str;
-        if status == "needs_human" {
-            fail("Synqit needs a human product decision.");
-            if result.get("reason") {
-                info(gray("    " + (result["reason"] as str)));
-            }
-            info(gray("    Your local work is unchanged."));
-            return;
+        info(green("    workspace matches " + branch + " - a push would work from intent alone"));
+    } else {
+        info(gray("    " + str(len(changes)) + " local change(s) a push would use as its proposal:"));
+        for change in changes {
+            label: str = (change["change_type"] as str).ljust(8);
+            info("      " + label + " " + (change["path"] as str));
         }
-        if status == "integration_incomplete" {
-            fail("Integration could not be verified as complete after retries.");
-            if result.get("reason") {
-                info(gray("    " + (result["reason"] as str)));
-            }
-            info(gray("    Your local work is unchanged. Try a smaller/more specific push."));
-            return;
-        }
-        if status != "published" {
-            fail("Unexpected result: " + str(result));
-            return;
-        }
+    }
 
-        try {
-            synced_sha: str = sync_to_commit(state["branch"] as str or "main");
-            new_state: dict = dict(state);
-            new_state["baseSha"] = synced_sha;
-            new_state["fileHashes"] = hashes_for(read_tracked_workspace());
-            save_state(new_state);
-            head: str = result["head"] as str;
-            ok("published -> GitHub " + head[:7]);
-            info(cyan("    synced this workspace to the new shared main. You are ready for the next feature."));
-        } except Exception as sync_error {
-            fail("Published to GitHub " + (result["head"] as str)[:7] + ", but this workspace could not sync automatically. Run `synqit repair`. (" + str(sync_error) + ")");
-        }
-    } except Exception as error {
-        fail(str(error));
+    key_warning: str = missing_api_key();
+    if key_warning {
+        info(gray("    ANTHROPIC_API_KEY is not set - `synqit push` will not run"));
     }
-}
 
-def cmd_status {
-    cfg = require_session();
-    state = load_state();
-    if state is None {
-        fail("This folder is not connected. Run `synqit init` first.");
-        return;
+    blocked: str = preflight(branch);
+    if blocked {
+        info(gray("    blocked: " + blocked));
     }
-    changes = changed_files(read_tracked_workspace(), state["fileHashes"] as dict);
-    info("Synqit project: " + (state["project"] as str));
-    info("  server: " + (state["base"] as str));
-    info("  logged in as: " + (cfg["username"] as str));
-    info("  local changes ready to push: " + str(len(changes)));
-    try {
-        proj: dict = call_walker(cfg["base"] as str, cfg["token"] as str, "get_project", {"name": state["project"]}, 30) as dict;
-        head: str = proj["head"] as str;
-        suffix: str = " (up to date)" if head == state["baseSha"] else " (newer version available - run synqit repair)";
-        info("  shared GitHub commit: " + head[:7] + suffix);
-    } except Exception as error {
-        fail(str(error));
-    }
-}
-
-def cmd_repair {
-    cfg = require_session();
-    state = load_state();
-    if state is None {
-        fail("This folder is not connected. Run `synqit init` first.");
-        return;
-    }
-    step("Restoring this workspace to " + (state["project"] as str));
-    try {
-        call_walker(cfg["base"] as str, cfg["token"] as str, "get_project", {"name": state["project"]}, 30);
-        synced_sha: str = sync_to_commit(state["branch"] as str or "main");
-        new_state: dict = dict(state);
-        new_state["baseSha"] = synced_sha;
-        new_state["fileHashes"] = hashes_for(read_tracked_workspace());
-        save_state(new_state);
-        ok("restored GitHub " + synced_sha[:7] + " - this workspace is clean and synced");
-    } except Exception as error {
-        fail(str(error));
-    }
+    sys.exit(0);
 }
 
 def cmd_help {
-    print(bold("synqit") + " - shared source control without branches, commits, or pulls\n");
-    print(bold("Usage"));
-    print("  synqit configure                 Set up the SERVER's GitHub token + Anthropic key (run once, from the repo root)");
-    print("  synqit login [--base <url>]      Log in (or create an account) on a Synqit server");
-    print("  synqit init [project]            Connect this repo root to Synqit");
-    print("  synqit push \"feature intent\"     Submit a feature and sync this workspace");
-    print("  synqit status                    Show this workspace's sync state");
-    print("  synqit repair                    Restore this workspace to shared GitHub main");
-    print("  synqit help                      Show this help\n");
-    print(bold("Example"));
-    print("  synqit configure                 # from the repo root, on the machine hosting the server");
-    print("  synqit login --base https://synqit.example");
-    print("  synqit init hackathon-demo");
-    print("  synqit push \"Add password validation\"");
+    info("");
+    info(bold("  synqit") + gray(" - shared source control without branches, commits, or pulls"));
+    info("");
+    info(bold("  Usage"));
+    info("    synqit push \"feature intent\"     Make the intent true on the shared branch");
+    info("    synqit status                    Show how this workspace differs from it");
+    info("    synqit help                      Show this help");
+    info("");
+    info(bold("  Options"));
+    info("    --branch <name>                  Shared branch (default: main)");
+    info("    --hops <n>                       Dependency hops of context (default: 2)");
+    info("");
+    info(bold("  Setup"));
+    info("    export ANTHROPIC_API_KEY=sk-ant-...");
+    info(gray("    Everything runs locally; publishing uses your own git credentials."));
+    info("");
 }

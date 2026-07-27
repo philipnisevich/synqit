@@ -1,12 +1,15 @@
+"""`synqit` entry point - argument parsing and dispatch only.
+
+Unknown flags are rejected rather than ignored: a typo in `--branch` silently
+publishing to the wrong branch is a far worse outcome than an error message.
+"""
+
 import sys;
 
-import from commands { cmd_login, cmd_configure, cmd_init, cmd_push, cmd_status, cmd_repair, cmd_help }
+import from commands { cmd_push, cmd_status, cmd_help }
 import from ui { fail }
 
-glob KNOWN_FLAGS: list[str] = [
-    "base", "branch", "github", "username", "password",
-    "jac-dir", "github-token", "anthropic-key",
-];
+glob KNOWN_FLAGS: list[str] = ["branch", "hops"];
 
 obj ParsedArgs {
     has positionals: list[str] = [];
@@ -18,15 +21,27 @@ def parse_args(argv: list[str]) -> ParsedArgs {
     i: int = 0;
     while i < len(argv) {
         arg: str = argv[i];
+
         if arg == "-h" or arg == "--help" {
             result.flags["help"] = "true";
             i += 1;
             continue;
         }
+
+        # Everything after a bare `--` is literal text, so an intent may
+        # contain leading dashes without being mistaken for a flag.
+        if arg == "--" {
+            result.positionals += argv[i + 1:];
+            break;
+        }
+
         if arg.startswith("--") {
             body: str = arg[2:];
             if "=" in body {
                 parts: list[str] = body.split("=", 1);
+                if parts[0] not in KNOWN_FLAGS {
+                    raise Exception("Unknown flag --" + parts[0]);
+                }
                 result.flags[parts[0]] = parts[1];
                 i += 1;
                 continue;
@@ -41,6 +56,7 @@ def parse_args(argv: list[str]) -> ParsedArgs {
             i += 2;
             continue;
         }
+
         result.positionals.append(arg);
         i += 1;
     }
@@ -65,21 +81,12 @@ with entry {
 
         if command == "help" {
             cmd_help();
-        } elif command == "login" {
-            cmd_login(parsed.flags.get("base"), parsed.flags.get("username"), parsed.flags.get("password"));
-        } elif command == "configure" {
-            cmd_configure(parsed.flags.get("jac-dir"), parsed.flags.get("github-token"), parsed.flags.get("anthropic-key"));
-        } elif command == "init" {
-            project_arg: str | None = rest[0] if rest else None;
-            cmd_init(project_arg, parsed.flags.get("branch"), parsed.flags.get("github"));
         } elif command == "push" {
-            cmd_push(rest);
+            cmd_push(rest, parsed.flags.get("branch"), parsed.flags.get("hops"));
         } elif command == "status" {
-            cmd_status();
-        } elif command == "repair" {
-            cmd_repair();
+            cmd_status(parsed.flags.get("branch"));
         } else {
-            fail("Unknown command \"" + command + "\". Run `synqit help`.");
+            fail("Unknown command '" + command + "'. Run `synqit help`.");
             sys.exit(1);
         }
     }
