@@ -2,6 +2,10 @@ import os;
 
 import from nodes { PushRequest, File, Project }
 import from walkers.blast_radius { compute_blast_radius, BlastFile }
+import from integrations.notch {
+    ask_developer as escalate_to_notch, decisions as notch_decisions,
+    set_context as set_notch_context,
+}
 import from byllm.lib { Model }
 
 """Constructing a Model needs no credentials - byLLM only reads
@@ -53,8 +57,37 @@ obj Workspace {
         return "deleted";
     }
 
+    """The escalation seam, exposed to the model as one more tool.
+
+    This is deliberately *not* a way out of the loop. The return value is the
+    developer's answer, delivered as the result of the model's own tool call, so
+    a conflict that needed a human becomes a question and then keeps going -
+    rather than a rejected push the developer has to decode after the fact.
+    """
+    def ask_developer(
+        title: str,
+        summary: str,
+        file: str,
+        conflicts_with: str,
+        option_mine: str,
+        option_theirs: str,
+    ) -> str {
+        self.activity.append("asked the developer about " + file + ": " + title);
+        return escalate_to_notch(
+            title=title,
+            summary=summary,
+            file=file,
+            conflicts_with=conflicts_with,
+            option_mine=option_mine,
+            option_theirs=option_theirs,
+        );
+    }
+
     def integrate(intent: str, proposed_changes: list[dict]) -> IntegrationResult by llm(
-        tools=[self.list_files, self.read_file, self.write_file, self.delete_file],
+        tools=[
+            self.list_files, self.read_file, self.write_file, self.delete_file,
+            self.ask_developer,
+        ],
         max_react_iterations=20,
         temperature=None,
     );
@@ -72,7 +105,15 @@ sem Workspace.write_file.content = "The complete new content of the file - not a
 sem Workspace.delete_file = "Delete a file.";
 sem Workspace.delete_file.path = "The file path to delete.";
 
-sem Workspace.integrate = "Make the feature intent true in the CURRENT workspace, which may have moved on since the developer proposed their changes. Use the tools to inspect and edit files - a successful integration MUST call write_file or delete_file at least once, never just describe the change. The workspace contains every file structurally reachable from what you're changing (callers, dependents, tests) - before finishing, use list_files and read_file to check whether anything else in the workspace references what you changed (a renamed or removed function, a changed signature, a moved export), and update every call site you find so nothing is left broken. Only return needs_human when the intent is genuinely incompatible with what the workspace already does (e.g. contradicts a product decision already made elsewhere) - never for ordinary implementation difficulty.";
+sem Workspace.ask_developer = "Put a product decision to the developer who pushed, and wait for their answer. Use this ONLY when the intent and what the workspace already does are both coherent but mutually exclusive, so that implementing one means undoing the other, and nothing in the workspace tells you which the team wants. It blocks while a human answers, so it must not be called for anything you could work out yourself, and it must not be called more than once for the same decision. It returns the developer's actual choice - carry on integrating with that answer rather than stopping.";
+sem Workspace.ask_developer.title = "The decision in one short line, naming both sides, e.g. 'Free tier removal vs. unlimited free projects'.";
+sem Workspace.ask_developer.summary = "One or two plain sentences a developer can decide from without opening the code: what their intent does, what the workspace already does, and why the two cannot both hold.";
+sem Workspace.ask_developer.file = "The file where the two sides actually collide.";
+sem Workspace.ask_developer.conflicts_with = "What the workspace already does, stated as the intent behind it, e.g. 'The free tier was deliberately removed'.";
+sem Workspace.ask_developer.option_mine = "Label for going with the developer's intent, in their own vocabulary, e.g. 'Keep unlimited free projects'. A few words - it is a button.";
+sem Workspace.ask_developer.option_theirs = "Label for leaving what the workspace already does intact, e.g. 'Keep the free tier removed'. A few words - it is a button.";
+
+sem Workspace.integrate = "Make the feature intent true in the CURRENT workspace, which may have moved on since the developer proposed their changes. Use the tools to inspect and edit files - a successful integration MUST call write_file or delete_file at least once, never just describe the change. The workspace contains every file structurally reachable from what you're changing (callers, dependents, tests) - before finishing, use list_files and read_file to check whether anything else in the workspace references what you changed (a renamed or removed function, a changed signature, a moved export), and update every call site you find so nothing is left broken. If the intent turns out to be genuinely incompatible with what the workspace already does - it reverses a product decision the code plainly encodes, and honouring one side means abandoning the other - that is not yours to settle: call ask_developer once with the two ways it could go, then keep integrating using the answer it gives you. Only return needs_human when ask_developer tells you no answer is available. Never escalate ordinary implementation difficulty, ambiguity you can resolve by reading more of the workspace, or a question about how to write the code - and never quietly pick a side on a product question yourself.";
 sem Workspace.integrate.intent = "The feature the developer wants to be true.";
 sem Workspace.integrate.proposed_changes = "The developer's own proposed edits, written against their possibly-stale local copy - a strong hint for what to implement, not a literal patch to apply verbatim.";
 
@@ -171,6 +212,10 @@ def do_integrate(push_id: str, max_hops: int) -> dict {
     original_files: dict[str, str] = dict(workspace_files);
     ws = Workspace(files=dict(workspace_files));
 
+    # What the notch shows as the developer's side of any escalation. Set here
+    # rather than in the CLI because this is where both halves are known.
+    set_notch_context(push.intent, push.base_sha, len(push.changes), push.submitter);
+
     first = try_integrate(ws, push.intent, push.changes);
     if not first["ok"] {
         return {
@@ -182,7 +227,9 @@ def do_integrate(push_id: str, max_hops: int) -> dict {
 
     if result.status == "needs_human" {
         push.status = "needs_human";
-        return {"status": "needs_human", "reason": result.reason};
+        # Reached either because no notch was attached to ask, or because the
+        # question went unanswered. Both leave the developer's work untouched.
+        return {"status": "needs_human", "reason": result.reason, "decisions": notch_decisions()};
     }
 
     broken = find_broken_references(original_files, ws.files);
@@ -252,6 +299,7 @@ def do_integrate(push_id: str, max_hops: int) -> dict {
         "activity": ws.activity,
         "files_touched": touched_paths,
         "files_deleted": ws.deleted,
+        "decisions": notch_decisions(),
     };
 }
 

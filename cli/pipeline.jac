@@ -28,6 +28,7 @@ import from nodes { Project, File, PushRequest, Touches }
 import from walkers.blast_radius { compute_blast_radius, BlastFile }
 import from walkers.integrate { do_integrate }
 import from walkers.seed_project { do_seed_project_local }
+import from integrations.notch { attach as notch_attach, detach as notch_detach }
 import from integrations.local_repo {
     apply_changes, at_repo_root, commit_all, current_branch, derive_owner_repo,
     fetch_branch, git_identity, has_remote, ignore_local_artifacts, reset_to,
@@ -53,6 +54,9 @@ obj PushOutcome {
     has attempts: int = 0;
     has diff: dict[str, str | None] = {};
     has warnings: list[str] = [];
+    """Anything the developer settled in the notch during this push, so the
+    commit that lands can be traced back to the answer that shaped it."""
+    has decisions: list[str] = [];
 }
 
 """An integration can run for the better part of a minute, and a retry doubles
@@ -362,6 +366,7 @@ def attempt(
             message=(result.get("reason") or "") as str,
             context_files=context_paths,
             recovery_sha=recovery_sha,
+            decisions=(result.get("decisions") or []) as list[str],
         );
     }
 
@@ -407,6 +412,7 @@ def attempt(
             context_files=context_paths,
             recovery_sha=recovery_sha,
             warnings=warnings,
+            decisions=(result.get("decisions") or []) as list[str],
         );
     }
 
@@ -472,18 +478,37 @@ def run_push(
         recovery_sha = (recovery or "") as str;
     }
 
+    # Open the escalation surface for the whole push, not just for the moment a
+    # question arises. The notch reconnects with backoff, so attaching only once
+    # the agent is already stuck would spend that backoff with the developer
+    # waiting. A dry run never integrates, so it never needs one.
+    notch_note: str = "";
+    if not dry_run {
+        opened = notch_attach(report_progress);
+        notch_note = opened.note;
+    }
+
     outcome = PushOutcome(status="error", message="Push did not run.");
     attempt_number: int = 0;
-    while attempt_number < MAX_PUBLISH_ATTEMPTS {
-        attempt_number += 1;
-        outcome = attempt(
-            project, intent, branch, submitter, max_hops,
-            recovery_sha, dry_run, report_progress,
-        );
-        outcome.attempts = attempt_number;
-        if outcome.status != "rejected" {
-            return outcome;
+    try {
+        while attempt_number < MAX_PUBLISH_ATTEMPTS {
+            attempt_number += 1;
+            outcome = attempt(
+                project, intent, branch, submitter, max_hops,
+                recovery_sha, dry_run, report_progress,
+            );
+            outcome.attempts = attempt_number;
+            if outcome.status != "rejected" {
+                if notch_note {
+                    outcome.warnings.append(notch_note);
+                }
+                return outcome;
+            }
         }
+    } finally {
+        # The socket must not outlive the push that opened it, on any path out
+        # of here - the next push binds the same port.
+        notch_detach();
     }
 
     outcome.status = "error";

@@ -68,6 +68,8 @@ used as the proposal — a strong hint for what to implement, not a literal patc
 | `synqit push "<intent>"` | Make the intent true on the shared branch |
 | `synqit status` | How this workspace differs from it |
 | `synqit doctor` | Check everything a push needs |
+| `synqit notch` | Attach the notch that asks you to decide |
+| `synqit notch status` | Show the notch attached to this machine |
 | `--dry-run` | Show the context and proposal, change nothing |
 | `--branch <name>` | Shared branch (default: `main`) |
 | `--hops <n>` | Dependency hops of context (default: `2`) |
@@ -92,6 +94,84 @@ step. If anything fails after the working tree is touched, your original edits
 are recoverable — Synqit records them with `git stash create` first and prints
 the sha.
 
+## When the agent can't decide: the notch
+
+Most conflicts have a right answer the agent can work out by reading the code.
+Some don't. If your intent and what `main` already does are both coherent but
+mutually exclusive — you want unlimited free projects, the free tier was
+deliberately removed last week — then no amount of context resolves it. That is
+a product decision, and it belongs to you.
+
+So the agent stops and asks, in your Mac's notch:
+
+```
+  ?  Free tier removal vs. unlimited free projects
+     answer it in the notch - this push is waiting
+```
+
+Answering it is not the end of the push. Your choice comes back as the result of
+the agent's own tool call, and the *same* integration carries on with it —
+`ask_developer` is a suspend, not an exit. A conflict becomes a question, not a
+rejected push.
+
+```
+synqit push ──> blast radius ──> integration agent ──┐
+                                    │  ▲             │
+                        ask_developer│  │your answer  │ complete
+                                    ▼  │             ▼
+                              Synqit Notch      git commit + push
+```
+
+The macOS app is [ben564885/notchh](https://github.com/ben564885/notchh),
+vendored unchanged in `notch/`. It speaks the same `escalation` / `resolution` /
+`withdraw` wire contract it always did — the difference is what sits on the other
+end. Synqit has no server, so the thing the notch connects to is the push itself:
+`integrations/notch.jac` opens a WebSocket on `127.0.0.1` for exactly as long as
+a push runs, and closes it on the way out.
+
+### Attaching it
+
+```bash
+cd notch && make install     # builds the .app, copies it to /Applications
+cd .. && synqit notch        # writes ~/.synqit/config.json, stores a token
+open "/Applications/Synqit Notch.app"
+```
+
+`synqit notch` provisions both ends from one file so they cannot disagree about
+who you are, and hands the app a token on **stdin** — it goes to your login
+keychain, never to disk or your shell history. Check it took with `synqit notch
+status`. Turn on **Launch at login** from the menu-bar item and you are done.
+
+See the surface without spending a push or an API call:
+
+```bash
+jac run tools/notch_demo.jac
+```
+
+### What it does when nobody answers
+
+Not answering is safe, and it is the same outcome as never attaching a notch at
+all: after five minutes (`SYNQIT_DECISION_TIMEOUT`) the question withdraws
+itself, the push ends as `needs_human`, and **nothing is committed** — your
+local work is untouched either way. The agent is told no answer was available
+and stops; it is never told to pick a side.
+
+Three properties worth stating plainly, because they are what make this safe to
+put in front of a model:
+
+- **The bridge never decides anything.** It carries a question and returns an
+  answer. Every `needs_human` is the *absence* of a decision, never one the code
+  invented.
+- **Loopback is still authenticated.** Binding to `127.0.0.1` keeps other
+  machines out, not other processes on this one.
+- **Inbound events are data, never commands.** An unrecognised message type is
+  ignored at both ends.
+
+Both sides are tested. `jac test tests/test_notch.jac` runs nine tests over a
+real socket — the upgrade, the token check, the round trip, pending-sync for a
+notch that attaches late, expiry, and the wire shape — and `cd notch && make
+test` runs the app's own 29.
+
 ## Layout
 
 The repo root is also a Jac full-stack app (`jac.toml`, entry `main.jac`) that
@@ -107,7 +187,12 @@ the CLI never calls it.
   both paths, so the local and hosted graphs are identical by construction.
 - `walkers/blast_radius.jac` — BFS over `Imports` edges to scope context.
 - `walkers/integrate.jac` — the LLM integration loop plus the deterministic
-  broken-reference check that verifies its output.
+  broken-reference check that verifies its output. `ask_developer` is one of its
+  tools.
+- `integrations/notch.jac` — the escalation surface: the loopback WebSocket the
+  notch attaches to, and the question/answer seam the agent calls into.
+- `notch/` — the macOS app, vendored from `ben564885/notchh`.
+- `tools/notch_demo.jac` — fire one escalation at the notch, no API key needed.
 - `nodes.jac` — the graph schema: `Project`, `File`, `PushRequest`, and the
   `Imports` / `Touches` edges.
 - `services/`, `components/`, `styles/` — the hosted dashboard and landing page.

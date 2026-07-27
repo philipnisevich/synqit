@@ -18,6 +18,11 @@ import from env_guard { key_source, has_accountable_key, REPO_ENV_PATH }
 import from spinner { Spinner, INTEGRATION_PHRASES }
 import from setup_env { verify_anthropic_key, exclude_from_git, write_env_value }
 import from pipeline { run_push, preflight, proposed_changes, PushOutcome }
+import from integrations.notch {
+    NotchConfig, app_binary, app_running, config_path as notch_config_path,
+    default_dev_id, install_token, read_config as read_notch_config,
+    write_config as notch_write_config,
+}
 import from integrations.local_repo {
     at_repo_root, current_branch, derive_owner_repo, fetch_branch, has_remote,
     repo_root, run_git, snapshot_at_ref, snapshot_worktree,
@@ -99,6 +104,7 @@ def report(outcome: PushOutcome, branch: str) -> int {
         if outcome.summary {
             info(gray("    " + outcome.summary));
         }
+        render_paths("you decided:", outcome.decisions);
         render_paths("changed:", outcome.files_touched);
         render_paths("deleted:", outcome.files_deleted);
         if outcome.attempts > 1 {
@@ -112,6 +118,15 @@ def report(outcome: PushOutcome, branch: str) -> int {
         fail("This intent conflicts with what the codebase already does.");
         if outcome.message {
             info(gray("    " + outcome.message));
+        }
+        # The agent reaches this only when it could not ask: no notch attached,
+        # or the question went unanswered. Which of the two it was decides what
+        # the developer should do next, so say so rather than guessing.
+        if read_notch_config() is None {
+            info(gray("    No notch is attached, so it had to stop instead of asking you."));
+            info(gray("    Run `synqit notch` and push again to be asked in the notch instead."));
+        } else {
+            info(gray("    The question went unanswered, so nothing was decided."));
         }
         info(gray("    Nothing was committed. Adjust the intent and try again."));
         return 2;
@@ -169,6 +184,28 @@ def show_progress(phase: str, detail: str) {
         ACTIVE_SPINNER.start();
         return;
     }
+
+    # The integration has stopped at something only the developer can settle.
+    # Say so in the terminal too: the question is in the notch, but the push is
+    # what is holding, and this is where they are looking.
+    if phase == "escalation" {
+        info("");
+        info("  " + bold("?  " + detail));
+        info(gray("     answer it in the notch - this push is waiting"));
+        return;
+    }
+    if phase == "decided" {
+        ok("you chose: " + detail);
+        # Back to work: the agent carries on integrating with that answer.
+        ACTIVE_SPINNER.phrases = INTEGRATION_PHRASES;
+        ACTIVE_SPINNER.start();
+        return;
+    }
+    if phase == "unanswered" {
+        info(gray("     " + detail));
+        return;
+    }
+
     step(gray(phase.ljust(12)) + detail);
 }
 
@@ -227,6 +264,98 @@ def cmd_configure(key_flag: str | None) {
 
     ok("saved to " + env_path + " (mode 600, git-ignored)");
     info(gray("    Run `synqit doctor` to confirm, then `synqit push \"...\"`."));
+    sys.exit(0);
+}
+
+"""Attach this machine's notch, or report on the one already attached.
+
+Two files make an attachment: `~/.synqit/config.json`, which both ends read so
+they agree on who this developer is, and a token, which the app keeps in the
+login keychain rather than on disk. Re-running is the repair path - it rewrites
+the config and re-hands the same token to the app."""
+def cmd_notch(args: list[str]) {
+    subcommand: str = "";
+    if args {
+        subcommand = args[0];
+    }
+
+    if subcommand == "status" {
+        cmd_notch_status();
+        return;
+    }
+    if subcommand {
+        fail("Unknown subcommand '" + subcommand + "'. Try `synqit notch` or `synqit notch status`.");
+        sys.exit(1);
+    }
+
+    dev_id: str = default_dev_id();
+    config = notch_write_config(dev_id, "127.0.0.1", 8787);
+    ok("attached " + dev_id + " at " + "ws://" + config.host + ":" + str(config.port));
+    info(gray("    " + notch_config_path()));
+
+    binary: str = app_binary();
+    if not binary {
+        fail("The notch app isn't built yet, so it has no token.");
+        info(gray("    Build and install it, then run `synqit notch` again:"));
+        info("      cd notch && make install");
+        sys.exit(1);
+    }
+
+    step("storing the token in your login keychain");
+    problem: str = install_token(binary, config.token);
+    if problem {
+        fail(problem);
+        sys.exit(1);
+    }
+    ok("token stored (keychain, never written to disk)");
+
+    if app_running() {
+        info(gray("    The notch is running and will reconnect on your next push."));
+    } else {
+        info(gray("    Launch it, then turn on Launch at login from the menu bar:"));
+        info("      open \"/Applications/Synqit Notch.app\"");
+    }
+    info(gray("    A push that hits a decision only you can make will now ask you."));
+    sys.exit(0);
+}
+
+
+def cmd_notch_status {
+    found = read_notch_config();
+    if found is None {
+        fail("No notch attached on this machine.");
+        info(gray("    Run `synqit notch` to attach one. Without it, a push that hits a"));
+        info(gray("    genuine product conflict stops instead of asking you."));
+        sys.exit(1);
+    }
+    config: NotchConfig = found as NotchConfig;
+
+    info(bold("  synqit notch") + gray("   " + notch_config_path()));
+    info("    dev id     " + config.dev_id);
+    info("    endpoint   ws://" + config.host + ":" + str(config.port) + gray("  (loopback, opened only during a push)"));
+
+    if config.token {
+        info("    token      " + green("set"));
+    } else {
+        info("    token      " + red("missing") + gray("  - run `synqit notch` to store one"));
+    }
+
+    binary: str = app_binary();
+    if binary {
+        info("    app        " + binary);
+    } else {
+        info("    app        " + red("not installed") + gray("  - build it with `cd notch && make install`"));
+    }
+
+    if app_running() {
+        info("    running    " + green("yes"));
+    } else {
+        info("    running    " + gray("no") + gray("  - open \"/Applications/Synqit Notch.app\""));
+    }
+
+    if not config.token or not binary {
+        sys.exit(1);
+    }
     sys.exit(0);
 }
 
@@ -434,6 +563,8 @@ def cmd_help {
     info("    synqit push \"feature intent\"     Make the intent true on the shared branch");
     info("    synqit status                    Show how this workspace differs from it");
     info("    synqit doctor                    Check everything a push needs");
+    info("    synqit notch                     Attach the notch that asks you to decide");
+    info("    synqit notch status              Show the notch attached to this machine");
     info("    synqit help                      Show this help");
     info("");
     info(bold("  Options"));
