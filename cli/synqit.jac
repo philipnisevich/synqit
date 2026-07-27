@@ -10,7 +10,7 @@ import sys;
 # before byLLM's Model construction injects ANTHROPIC_API_KEY into it. Moving
 # this line below the next one silently breaks the key-source check.
 import from env_guard { key_source }
-import from commands { cmd_push, cmd_status, cmd_doctor, cmd_configure, cmd_help }
+import from commands { cmd_push, cmd_status, cmd_doctor, cmd_configure, cmd_notch, cmd_help }
 import from ui { fail }
 
 glob KNOWN_FLAGS: list[str] = ["branch", "hops", "key"];
@@ -104,6 +104,8 @@ with entry {
             cmd_doctor(parsed.flags.get("branch"));
         } elif command == "configure" {
             cmd_configure(parsed.flags.get("key"));
+        } elif command == "notch" {
+            cmd_notch(rest);
         } else {
             fail("Unknown command '" + command + "'. Run `synqit help`.");
             sys.exit(1);

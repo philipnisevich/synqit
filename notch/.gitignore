@@ -1,0 +1,9 @@
+.build/
+.swiftpm/
+*.xcodeproj
+*.xcworkspace
+.DS_Store
+.jacvenv/
+.jac/
+jac/.jac/
+*.jir
