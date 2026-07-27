@@ -36,6 +36,11 @@ import from integrations.local_repo {
 
 glob MAX_PUBLISH_ATTEMPTS: int = 3;
 
+# Soft guideline, not a hard limit. Roughly 250k characters is where a context
+# stops helping an integration and starts burying the relevant files - a bound
+# on usefulness rather than on what the model can technically accept.
+glob MAX_CONTEXT_CHARS: int = 250000;
+
 obj PushOutcome {
     has status: str;
     has message: str = "";
@@ -46,6 +51,16 @@ obj PushOutcome {
     has context_files: list[str] = [];
     has recovery_sha: str = "";
     has attempts: int = 0;
+    has diff: dict[str, str | None] = {};
+    has warnings: list[str] = [];
+}
+
+"""An integration can run for the better part of a minute, and a retry doubles
+that. Without progress the CLI looks hung, so the pipeline reports each phase
+through a caller-supplied sink rather than printing directly - keeping this
+module free of presentation and usable from the dashboard unchanged."""
+def no_progress(phase: str, detail: str) {
+    return;
 }
 
 """Fail fast on the things that make a push meaningless, with a message that
@@ -241,7 +256,19 @@ Returns a PushOutcome whose status is one of: published, needs_human,
 integration_incomplete, no_changes, rejected (branch moved - caller retries),
 or error.
 """
-def attempt(project: str, intent: str, branch: str, submitter: str, max_hops: int, recovery_sha: str) -> PushOutcome {
+def attempt(
+    project: str,
+    intent: str,
+    branch: str,
+    submitter: str,
+    max_hops: int,
+    recovery_sha: str,
+    dry_run: bool,
+    progress: any,
+) -> PushOutcome {
+    warnings: list[str] = [];
+
+    progress("reading", "reading " + branch + " from the local object store");
     seeded = do_seed_project_local(project, branch);
     if "error" in seeded {
         return PushOutcome(
@@ -253,6 +280,7 @@ def attempt(project: str, intent: str, branch: str, submitter: str, max_hops: in
 
     base_sha: str = seeded["head"] as str;
     proj = [root -->[?:Project, name == project]][0];
+    progress("graph", str(seeded["files"]) + " files, " + str(seeded["import_edges"]) + " import edges");
 
     baseline: dict[str, str] = snapshot_at_ref(base_sha);
     worktree: dict[str, str] = snapshot_worktree();
@@ -273,11 +301,49 @@ def attempt(project: str, intent: str, branch: str, submitter: str, max_hops: in
         );
     }
 
+    if changes {
+        progress("proposal", str(len(changes)) + " local change(s) as the proposal");
+    } else {
+        progress("proposal", "intent only - seeding from " + str(len(seed_paths)) + " matched file(s)");
+    }
+
     push = record_push(proj, intent, base_sha, changes, seed_paths, submitter);
 
     context: list[BlastFile] = compute_blast_radius(jid(push), max_hops);
     context_paths: list[str] = [f.path for f in context];
 
+    context_chars: int = 0;
+    for f in context {
+        context_chars += len(f.content);
+    }
+    progress(
+        "context",
+        str(len(context_paths)) + " file(s) within " + str(max_hops)
+        + " hop(s), " + str(context_chars // 1000) + "k chars",
+    );
+
+    # An oversized context degrades the integration rather than failing it, so
+    # this warns instead of refusing - but silently sending a megabyte of code
+    # and getting a poor result is the outcome worth preventing.
+    if context_chars > MAX_CONTEXT_CHARS {
+        warnings.append(
+            "Context is " + str(context_chars // 1000) + "k characters, above the "
+            + str(MAX_CONTEXT_CHARS // 1000) + "k guideline. Try --hops "
+            + str(max(0, max_hops - 1)) + " for a tighter scope."
+        );
+    }
+
+    if dry_run {
+        return PushOutcome(
+            status="dry_run",
+            context_files=context_paths,
+            files_touched=[change["path"] as str for change in changes],
+            recovery_sha=recovery_sha,
+            warnings=warnings,
+        );
+    }
+
+    progress("integrating", "running the integration model");
     result = do_integrate(jid(push), max_hops);
 
     if "error" in result {
@@ -327,6 +393,7 @@ def attempt(project: str, intent: str, branch: str, submitter: str, max_hops: in
         );
     }
 
+    progress("publishing", "pushing to " + branch);
     pushed = try_push(branch);
     if pushed["ok"] {
         push.status = "published";
@@ -339,6 +406,7 @@ def attempt(project: str, intent: str, branch: str, submitter: str, max_hops: in
             files_deleted=push.deleted_paths,
             context_files=context_paths,
             recovery_sha=recovery_sha,
+            warnings=warnings,
         );
     }
 
@@ -347,6 +415,7 @@ def attempt(project: str, intent: str, branch: str, submitter: str, max_hops: in
     # commit the remote never accepted.
     reset_to(base_sha);
     if pushed["rejected"] {
+        progress("rejected", branch + " moved - re-reading and integrating again");
         return PushOutcome(status="rejected", context_files=context_paths, recovery_sha=recovery_sha);
     }
     return PushOutcome(
@@ -363,7 +432,16 @@ A rejection is not an error: it means someone else published first, which is
 the normal case Synqit exists to handle. Each retry re-reads the branch, so the
 integration is always made against what `main` actually is right now.
 """
-def run_push(intent: str, branch: str = "main", submitter: str = "", max_hops: int = 2) -> PushOutcome {
+def run_push(
+    intent: str,
+    branch: str = "main",
+    submitter: str = "",
+    max_hops: int = 2,
+    dry_run: bool = False,
+    progress: any = None,
+) -> PushOutcome {
+    report_progress: any = progress or no_progress;
+
     if not (intent or "").strip() {
         return PushOutcome(status="error", message="A feature intent is required.");
     }
@@ -386,14 +464,22 @@ def run_push(intent: str, branch: str = "main", submitter: str = "", max_hops: i
     project: str = repository.replace("/", "-");
     ensure_project(project, repository, branch);
 
-    recovery = stash_snapshot();
-    recovery_sha: str = (recovery or "") as str;
+    # A dry run never rewrites the working tree, so there is nothing to stash
+    # and no reason to make the developer wonder what got saved.
+    recovery_sha: str = "";
+    if not dry_run {
+        recovery = stash_snapshot();
+        recovery_sha = (recovery or "") as str;
+    }
 
     outcome = PushOutcome(status="error", message="Push did not run.");
     attempt_number: int = 0;
     while attempt_number < MAX_PUBLISH_ATTEMPTS {
         attempt_number += 1;
-        outcome = attempt(project, intent, branch, submitter, max_hops, recovery_sha);
+        outcome = attempt(
+            project, intent, branch, submitter, max_hops,
+            recovery_sha, dry_run, report_progress,
+        );
         outcome.attempts = attempt_number;
         if outcome.status != "rejected" {
             return outcome;
