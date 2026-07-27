@@ -1,60 +1,22 @@
-import from nodes { Project, File, Imports }
-import from integrations.github { read_project }
+"""Seeding a Project's file graph from whatever the current source of truth is.
 
-"""Authenticated. One-time (well, idempotent) seed of a Project's graph from
-the current state of its GitHub branch: populates File.content for every
-tracked file, and a cheap regex import-scan wires Imports edges between them.
-This is what gives blast_radius something real to walk - before this runs,
-File nodes exist (from pushes) but are empty and disconnected.
+Two entry points, one graph shape:
+
+- `do_seed_project` reads the branch through the GitHub API. This is the hosted
+  dashboard's path, where there is no checkout to read from.
+- `do_seed_project_local` reads the same branch out of the local git object
+  store. This is the CLI's path, and it is strictly better where it applies:
+  no token, no rate limit, and one subprocess instead of one HTTP request per
+  blob.
+
+Both hand the snapshot to graph_build.build_project_graph, so the graph the LLM
+eventually reasons over is identical either way.
 """
 
-# Two import dialects live in this repo (and in most real ones): quoted
-# relative specifiers (JS/TS) and Jac's unquoted dotted module paths. Scanning
-# for only the first is why a Jac codebase used to seed with zero Imports
-# edges, which left blast_radius returning nothing but the touched file.
-glob IMPORT_PATTERN: str = r'''(?:import\s+.*?from\s+|require\()\s*['"](\.[^'"]+)['"]''';
-glob JAC_IMPORT_PATTERN: str = r'''(?m)^[ \t]*import[ \t]+(?:from[ \t]+)?(\.*)([A-Za-z_][\w.]*)''';
-
-# A specifier names a module, not a file - `./Logo` is `Logo.tsx` on disk and
-# `walkers.blast_radius` is `walkers/blast_radius.jac`. Resolution has to try
-# the real extensions or every edge silently fails to bind.
-glob JS_SUFFIXES: list[str] = [
-    "", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".css",
-    "/index.ts", "/index.tsx", "/index.js", "/index.jsx",
-];
-glob JAC_SUFFIXES: list[str] = [".jac", ".sv.jac", ".cl.jac", ".impl.jac"];
-
-def resolve_import(from_path: str, import_spec: str) -> list[str] {
-    import from os.path { normpath, dirname, join }
-    base: str = normpath(join(dirname(from_path), import_spec));
-    return [base + suffix for suffix in JS_SUFFIXES];
-}
-
-"""Leading dots mean "relative to this file's directory" (`.components.Dashboard`);
-without them the path is repo-root relative (`walkers.blast_radius`). Bare
-stdlib/third-party imports (`os`, `byllm.lib`) resolve to nothing in the
-repo and are simply dropped by the caller's membership check."""
-def resolve_jac_import(from_path: str, dots: str, module: str) -> list[str] {
-    import from os.path { normpath, dirname, join }
-    relative_path: str = module.replace(".", "/");
-    base: str = normpath(join(dirname(from_path), relative_path)) if dots else relative_path;
-    return [base + suffix for suffix in JAC_SUFFIXES];
-}
-
-"""Every candidate path an import in `file_path` could be referring to."""
-def import_targets(file_path: str, content: str) -> list[list[str]] {
-    import re;
-    targets: list[list[str]] = [];
-    if file_path.endswith(".jac") {
-        for m in re.finditer(JAC_IMPORT_PATTERN, content) {
-            targets.append(resolve_jac_import(file_path, m.group(1), m.group(2)));
-        }
-    }
-    for m in re.finditer(IMPORT_PATTERN, content) {
-        targets.append(resolve_import(file_path, m.group(1)));
-    }
-    return targets;
-}
+import from nodes { Project, File, Imports }
+import from integrations.github { read_project }
+import from integrations.local_repo { fetch_branch, ref_sha, snapshot_at_ref }
+import from walkers.graph_build { build_project_graph }
 
 """Plain function (not walker-spawn-only) so the web service layer can call it
 directly - same lesson as blast_radius/compute_blast_radius."""
@@ -64,7 +26,7 @@ def do_seed_project(project: str, owner: str, repo: str, branch: str) -> dict {
         return {
             "error": "server_not_configured",
             "missing": "GITHUB_TOKEN",
-            "message": "This Synqit server has no GitHub token, so it cannot read the repository. Set GITHUB_TOKEN in the server environment (or run `synqit configure` from the repo root) and restart.",
+            "message": "This Synqit server has no GitHub token, so it cannot read the repository. Set GITHUB_TOKEN in the server environment and restart.",
         };
     }
 
@@ -74,54 +36,54 @@ def do_seed_project(project: str, owner: str, repo: str, branch: str) -> dict {
     }
     proj = projects[0];
 
-    result = read_project(owner, repo, branch);
-    snapshot: dict[str, str] = result["snapshot"] as dict[str, str];
-    head: str = result["head"] as str;
-    proj.head = head;
-
-    path_to_file: dict[str, File] = {};
-    for file_path in snapshot.keys() {
-        content: str = snapshot[file_path];
-        existing = [proj -->[?:File, path == file_path]];
-        file_node: File;
-        if existing {
-            file_node = existing[0];
-            file_node.content = content;
-            file_node.last_synced_sha = head;
-        } else {
-            file_node = (proj ++> File(path=file_path, content=content, last_synced_sha=head))[0];
-        }
-        path_to_file[file_path] = file_node;
+    try {
+        result = read_project(owner, repo, branch);
+    } except Exception as error {
+        return {"error": "github_read_failed", "message": str(error)};
     }
 
-    edge_count: int = 0;
-    linked: set[str] = set();
-    for file_path in snapshot.keys() {
-        for candidates in import_targets(file_path, snapshot[file_path]) {
-            for target_path in candidates {
-                if target_path not in path_to_file or target_path == file_path {
-                    continue;
-                }
-                # A module resolves to exactly one file - stop at the first
-                # candidate that exists, and never draw the same edge twice
-                # (two imports from one file to another is still one edge).
-                pair: str = file_path + " -> " + target_path;
-                if pair not in linked {
-                    path_to_file[file_path] +>:Imports():+> path_to_file[target_path];
-                    linked.add(pair);
-                    edge_count += 1;
-                }
-                break;
-            }
-        }
+    summary = build_project_graph(
+        proj,
+        result["snapshot"] as dict[str, str],
+        result["head"] as str,
+    );
+    summary["project"] = project;
+    return summary;
+}
+
+"""Seed from the local clone. `remote_ref` is resolved after a fetch so the
+baseline is the shared branch as it exists right now, not a stale local ref -
+integrating against a stale baseline is how a push silently reverts someone
+else's work."""
+def do_seed_project_local(project: str, branch: str, fetch: bool = True) -> dict {
+    projects = [root -->[?:Project, name == project]];
+    if not projects {
+        return {"error": "project_not_found", "project": project};
+    }
+    proj = projects[0];
+
+    try {
+        head: str = fetch_branch(branch) if fetch else ref_sha("origin/" + branch);
+    } except Exception as error {
+        return {"error": "git_read_failed", "message": str(error)};
     }
 
-    return {
-        "project": project,
-        "head": head,
-        "files": len(snapshot),
-        "import_edges": edge_count,
-    };
+    try {
+        snapshot: dict[str, str] = snapshot_at_ref(head);
+    } except Exception as error {
+        return {"error": "snapshot_failed", "message": str(error)};
+    }
+
+    if not snapshot {
+        return {
+            "error": "empty_snapshot",
+            "message": "No readable text files found at " + head[:7] + ". An empty repository has nothing to integrate against.",
+        };
+    }
+
+    summary = build_project_graph(proj, snapshot, head);
+    summary["project"] = project;
+    return summary;
 }
 
 """Authenticated."""
