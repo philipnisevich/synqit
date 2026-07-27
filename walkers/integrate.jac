@@ -76,6 +76,21 @@ sem Workspace.integrate = "Make the feature intent true in the CURRENT workspace
 sem Workspace.integrate.intent = "The feature the developer wants to be true.";
 sem Workspace.integrate.proposed_changes = "The developer's own proposed edits, written against their possibly-stale local copy - a strong hint for what to implement, not a literal patch to apply verbatim.";
 
+"""byLLM raises provider problems - bad key, rate limit, transient 5xx, context
+overflow - out of the call itself. Letting one escape turns a recoverable
+outage into a stack trace with a half-integrated graph behind it, so every LLM
+call goes through here and comes back as data the caller can act on.
+
+Returns {"ok": True, "result": IntegrationResult} or {"ok": False, "message": str}.
+"""
+def try_integrate(ws: Workspace, intent: str, proposed_changes: list[dict]) -> dict {
+    try {
+        return {"ok": True, "result": ws.integrate(intent=intent, proposed_changes=proposed_changes)};
+    } except Exception as error {
+        return {"ok": False, "message": str(error)};
+    }
+}
+
 """Deterministic - no LLM involved. Regex-extract exported symbol names
 (matches the same cheap-regex philosophy as seed_project's import scan)."""
 def extract_exports(content: str) -> set[str] {
@@ -156,7 +171,14 @@ def do_integrate(push_id: str, max_hops: int) -> dict {
     original_files: dict[str, str] = dict(workspace_files);
     ws = Workspace(files=dict(workspace_files));
 
-    result = ws.integrate(intent=push.intent, proposed_changes=push.changes);
+    first = try_integrate(ws, push.intent, push.changes);
+    if not first["ok"] {
+        return {
+            "error": "integration_failed",
+            "message": "The integration model call failed: " + (first["message"] as str),
+        };
+    }
+    result: IntegrationResult = first["result"] as IntegrationResult;
 
     if result.status == "needs_human" {
         push.status = "needs_human";
@@ -172,7 +194,14 @@ def do_integrate(push_id: str, max_hops: int) -> dict {
             fix_notes.append(path + " still references removed/renamed: " + syms);
         }
         follow_up_intent = push.intent + "\n\nVerification found unfinished work - fix these exactly: " + "; ".join(fix_notes);
-        result = ws.integrate(intent=follow_up_intent, proposed_changes=push.changes);
+        retry = try_integrate(ws, follow_up_intent, push.changes);
+        if not retry["ok"] {
+            # The first pass already succeeded and its edits are in ws.files.
+            # Stop retrying rather than failing the whole push - the broken-
+            # reference check below decides whether what we have is publishable.
+            break;
+        }
+        result = retry["result"] as IntegrationResult;
         broken = find_broken_references(original_files, ws.files);
         attempts += 1;
     }
