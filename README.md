@@ -70,6 +70,7 @@ used as the proposal — a strong hint for what to implement, not a literal patc
 | `synqit doctor` | Check everything a push needs |
 | `synqit notch` | Attach the notch that asks you to decide |
 | `synqit notch status` | Show the notch attached to this machine |
+| `synqit notch demo` | Pop up a random test issue in the notch |
 | `--dry-run` | Show the context and proposal, change nothing |
 | `--branch <name>` | Shared branch (default: `main`) |
 | `--hops <n>` | Dependency hops of context (default: `2`) |

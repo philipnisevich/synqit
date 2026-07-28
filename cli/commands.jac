@@ -12,6 +12,8 @@ the hosted dashboard shares, which is exactly how the two would drift.
 
 import os;
 import sys;
+import time;
+import random;
 import getpass;
 
 import from env_guard { key_source, has_accountable_key, REPO_ENV_PATH }
@@ -22,6 +24,9 @@ import from integrations.notch {
     NotchConfig, app_binary, app_running, config_path as notch_config_path,
     default_dev_id, install_token, read_config as read_notch_config,
     write_config as notch_write_config,
+    attach as notch_attach_bridge, detach as notch_detach_bridge,
+    is_attached as notch_is_attached, set_context as notch_set_context,
+    ask_developer as notch_ask_developer,
 }
 import from integrations.local_repo {
     at_repo_root, current_branch, derive_owner_repo, fetch_branch, has_remote,
@@ -283,8 +288,12 @@ def cmd_notch(args: list[str]) {
         cmd_notch_status();
         return;
     }
+    if subcommand == "demo" {
+        cmd_notch_demo();
+        return;
+    }
     if subcommand {
-        fail("Unknown subcommand '" + subcommand + "'. Try `synqit notch` or `synqit notch status`.");
+        fail("Unknown subcommand '" + subcommand + "'. Try `synqit notch`, `synqit notch status`, or `synqit notch demo`.");
         sys.exit(1);
     }
 
@@ -356,6 +365,96 @@ def cmd_notch_status {
     if not config.token or not binary {
         sys.exit(1);
     }
+    sys.exit(0);
+}
+
+
+glob NOTCH_DEMO_SCENARIOS: list = [
+    {
+        "intent": "Give free-tier users unlimited projects",
+        "base_sha": "f50e1f3aa11",
+        "title": "Free tier removal vs. unlimited free projects",
+        "summary": "Your change gives free-tier users unlimited projects, but the free tier was deliberately removed on main.",
+        "file": "pricing.js",
+        "conflicts_with": "Remove the free tier entirely",
+    },
+    {
+        "intent": "Switch default export format to JSON",
+        "base_sha": "9c2ab41d0f3",
+        "title": "Default export format: JSON vs. CSV",
+        "summary": "Your change makes JSON the default export, but main deliberately switched to CSV for spreadsheet users last week.",
+        "file": "exporter.py",
+        "conflicts_with": "Make CSV the default export",
+    },
+    {
+        "intent": "Allow guest checkout without an account",
+        "base_sha": "12d8e9aa607",
+        "title": "Guest checkout vs. mandatory accounts",
+        "summary": "Your change allows checkout without an account, but main deliberately requires accounts to cut fraud.",
+        "file": "checkout.ts",
+        "conflicts_with": "Require an account before checkout",
+    },
+    {
+        "intent": "Retry failed webhooks indefinitely",
+        "base_sha": "77aa310bc44",
+        "title": "Webhook retries: indefinite vs. capped",
+        "summary": "Your change retries failed webhooks forever, but main deliberately caps retries at 5 to protect downstream services.",
+        "file": "webhooks.go",
+        "conflicts_with": "Cap webhook retries at 5 attempts",
+    },
+];
+
+"""Fire one randomly chosen escalation at the attached notch, so you can see it
+light up without spending a push or an API call."""
+def cmd_notch_demo {
+    found = read_notch_config();
+    if found is None {
+        fail("No notch attached on this machine.");
+        info(gray("    Run `synqit notch` to attach one, then open the app."));
+        sys.exit(1);
+    }
+    config: NotchConfig = found as NotchConfig;
+
+    opened = notch_attach_bridge();
+    if opened.bridge is None {
+        note: str = opened.note or "No notch is attached on this machine.";
+        fail(note);
+        sys.exit(1);
+    }
+
+    info(gray("    listening on ws://" + config.host + ":" + str(config.port)));
+    step("waiting for " + config.dev_id + "'s notch to attach");
+
+    waited: float = 0.0;
+    while not notch_is_attached() and waited < 35.0 {
+        time.sleep(0.5);
+        waited += 0.5;
+    }
+    if notch_is_attached() {
+        ok("the notch is attached");
+    } else {
+        info(gray("    nothing attached yet - the question will still be waiting when it connects"));
+    }
+
+    scenario: dict = random.choice(NOTCH_DEMO_SCENARIOS);
+    info(gray("    scenario: " + scenario["title"]));
+
+    notch_set_context(scenario["intent"], scenario["base_sha"], 1, config.dev_id);
+
+    answer: str = notch_ask_developer(
+        title=scenario["title"],
+        summary=scenario["summary"],
+        file=scenario["file"],
+        conflicts_with=scenario["conflicts_with"],
+        option_mine="Keep mine",
+        option_theirs="Keep theirs",
+    );
+
+    info("");
+    info(bold("  the agent was told:"));
+    info("    " + answer);
+
+    notch_detach_bridge();
     sys.exit(0);
 }
 
@@ -565,6 +664,7 @@ def cmd_help {
     info("    synqit doctor                    Check everything a push needs");
     info("    synqit notch                     Attach the notch that asks you to decide");
     info("    synqit notch status              Show the notch attached to this machine");
+    info("    synqit notch demo                Pop up a random test issue in the notch");
     info("    synqit help                      Show this help");
     info("");
     info(bold("  Options"));
