@@ -661,6 +661,10 @@ obj NotchBridge {
     def handle(conn: NotchConn, message: dict) {
         kind: str = (message.get("type") or "") as str;
 
+        if os.environ.get("SYNQIT_NOTCH_DEBUG") {
+            print("  <- " + json.dumps(message));
+        }
+
         if kind == "hello" {
             conn.dev_id = (message.get("dev_id") or "") as str;
             return;
